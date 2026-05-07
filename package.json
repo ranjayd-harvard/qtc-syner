@@ -1,0 +1,23 @@
+{
+  "name": "qtc-syncer",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Multi-source data connector platform for Salesforce, NetSuite, and AWS Redshift",
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "docker compose -f docker-compose.yml -f docker-compose.dev.yml up",
+    "dev:down": "docker compose -f docker-compose.yml -f docker-compose.dev.yml down",
+    "dev:vpn": "docker compose -f docker-compose.vpn.yml up",
+    "dev:vpn:down": "docker compose -f docker-compose.vpn.yml down",
+    "connector:dev": "npm run dev --workspace=@qtc-syncer/connector-api",
+    "prod": "docker compose up",
+    "prod:build": "docker compose build",
+    "lint": "npm run lint --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

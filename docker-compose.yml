@@ -1,0 +1,71 @@
+services:
+  mongodb:
+    image: mongo:7.0
+    container_name: qtc-mongodb
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USER}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD}
+      MONGO_INITDB_DATABASE: qtc_syncer
+    volumes:
+      - mongodb_data:/data/db
+      - ./docker/mongo-init:/docker-entrypoint-initdb.d:ro
+    networks:
+      - qtc-internal
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  connector-api:
+    build:
+      context: ./apps/connector-api
+      dockerfile: Dockerfile
+    container_name: qtc-connector-api
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      CONNECTOR_INTERNAL_KEY: ${CONNECTOR_INTERNAL_KEY}
+    networks:
+      - qtc-internal
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:4000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  web:
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile
+    container_name: qtc-web
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      MONGODB_URI: mongodb://${MONGO_ROOT_USER}:${MONGO_ROOT_PASSWORD}@mongodb:27017/qtc_syncer?authSource=admin
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      CONNECTOR_API_URL: http://connector-api:4000
+      CONNECTOR_INTERNAL_KEY: ${CONNECTOR_INTERNAL_KEY}
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
+      NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost:3061}
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      connector-api:
+        condition: service_healthy
+    networks:
+      - qtc-internal
+
+networks:
+  qtc-internal:
+    driver: bridge
+
+volumes:
+  mongodb_data:
+    driver: local
