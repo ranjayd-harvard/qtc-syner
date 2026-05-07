@@ -7,11 +7,12 @@ A multi-source data connector platform for Salesforce, NetSuite, and AWS Redshif
 - **Connection Manager** — Configure and test connections to Salesforce, NetSuite, and Redshift
 - **Data Explorer** — Browse objects/tables and view data with server-side pagination, sorting, and filtering
 - **Schema Viewer** — Inspect field/column definitions for any object
-- **Custom Query Editor** — Run SOQL (Salesforce) or SQL (Redshift/NetSuite SuiteQL) queries
+- **Custom Query Editor** — Run SOQL (Salesforce), SuiteQL (NetSuite), or SQL (Redshift) queries
+- **Schema Compare** — Side-by-side field comparison across any two connection + object pairs with match/mismatch/left-only/right-only classification
 - **CSV Export** — Download table data as CSV
-- **Sync History** — Per-connection activity log
-- **Dashboard** — Overview of all connections, health status, and recent activity
-- **Authentication** — Secure login with NextAuth.js
+- **Sync History** — Per-connection activity log with duration and row counts
+- **Dashboard** — Stats grid, connection health cards, pie chart by source type, and recent activity feed
+- **Authentication** — Secure login with NextAuth.js (credentials provider, MongoDB session store)
 
 ## Architecture
 
@@ -44,8 +45,8 @@ A multi-source data connector platform for Salesforce, NetSuite, and AWS Redshif
 ### 1. Clone & configure
 
 ```bash
-git clone https://github.com/your-org/qtc-syncer.git
-cd qtc-syncer
+git clone https://github.com/ranjayd-harvard/qtc-syner.git
+cd qtc-syner
 
 cp .env.example .env
 ```
@@ -57,17 +58,38 @@ Edit `.env` and set:
 - `NEXTAUTH_SECRET` — base64 string (`openssl rand -base64 32`)
 - `ADMIN_EMAIL` / `ADMIN_PASSWORD` — your admin credentials
 
-### 2. Start (development)
+### 2. Seed the admin user
+
+```bash
+cd apps/web
+npx ts-node scripts/seed-admin.ts
+```
+
+This creates the admin account using `ADMIN_EMAIL` and `ADMIN_PASSWORD` from your `.env`.
+
+### 3. Start (development)
 
 ```bash
 npm run dev
-# or
-docker compose -f docker-compose.yml -f docker-compose.dev.yml up
 ```
 
-Open [http://localhost:3000](http://localhost:3000) and log in with your admin credentials.
+Open [http://localhost:3061](http://localhost:3061) and log in with your admin credentials.
 
-### 3. Start (production)
+Mongo Express (DB admin UI) is available at [http://localhost:8081](http://localhost:8081).
+
+### VPN mode
+
+If your Redshift or NetSuite instance is only reachable over VPN, run connector-api on the host machine:
+
+```bash
+# Terminal 1
+npm run dev:vpn           # MongoDB + web in Docker
+
+# Terminal 2
+npm run connector:dev     # connector-api on host (can reach VPN)
+```
+
+### 4. Start (production)
 
 ```bash
 npm run prod:build
