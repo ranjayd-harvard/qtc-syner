@@ -25,6 +25,9 @@ function getBreadcrumbs(pathname: string): { label: string; href?: string }[] {
     schema: 'Schema',
     query: 'Query',
     history: 'History',
+    compare: 'Schema Compare',
+    mapper: 'Schema Mapper',
+    'multi-mapper': 'Multi-level Mapping',
   };
 
   let path = '';

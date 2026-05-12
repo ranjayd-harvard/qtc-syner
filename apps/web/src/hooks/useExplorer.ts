@@ -73,6 +73,22 @@ export function useObjects(connectionId: string) {
   });
 }
 
+export function useRecordCount(connectionId: string, objectName: string) {
+  return useQuery({
+    queryKey: ['record-count', connectionId, objectName],
+    queryFn: async () => {
+      const res = await fetch(
+        `/api/connections/${connectionId}/count/${encodeURIComponent(objectName)}`
+      );
+      if (!res.ok) throw new Error('Failed to fetch record count');
+      const data = await res.json() as { count: number };
+      return data.count;
+    },
+    enabled: !!connectionId && !!objectName,
+    staleTime: 60_000,
+  });
+}
+
 export function useTableData(
   connectionId: string,
   objectName: string,

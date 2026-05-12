@@ -73,17 +73,101 @@ export class NetSuiteConnector implements BaseConnector {
     }
   }
 
-  async listObjects(): Promise<ObjectMeta[]> {
+  private async listRecordApiObjects(): Promise<ObjectMeta[]> {
     interface NSCatalogItem { name: string; links: unknown[] }
     interface NSCatalogResponse { items: NSCatalogItem[]; totalResults: number }
-    const result = await this.request<NSCatalogResponse>('GET', '/record/v1/metadata-catalog/');
-    return result.items
-      .filter((i) => !!i.name)
-      .map((i) => ({
-        name: i.name,
-        label: i.name.replace(/([A-Z])/g, ' $1').trim(),
-        type: 'object' as const,
-      }));
+    try {
+      const result = await this.request<NSCatalogResponse>('GET', '/record/v1/metadata-catalog/');
+      return result.items
+        .filter((i) => !!i.name)
+        .map((i) => ({
+          name: i.name,
+          label: i.name.replace(/([A-Z])/g, ' $1').trim(),
+          type: 'object' as const,
+        }));
+    } catch {
+      return [];
+    }
+  }
+
+  private async listSuiteQLTables(): Promise<ObjectMeta[]> {
+    type NSRow = Record<string, unknown>;
+    interface NSSuiteQLResponse { items: NSRow[]; totalResults: number }
+
+    // Try dynamic discovery first (OA_TABLES, then information_schema).
+    // Both may be unavailable depending on the NS account/version — the REST SuiteQL endpoint
+    // does not always expose metadata catalog tables.
+    const discoveryQueries = [
+      'SELECT * FROM OA_TABLES ORDER BY tableName OFFSET 0 ROWS FETCH NEXT 1000 ROWS ONLY',
+      'SELECT TABLE_NAME, TABLE_TYPE FROM information_schema.tables ORDER BY TABLE_NAME OFFSET 0 ROWS FETCH NEXT 1000 ROWS ONLY',
+    ];
+
+    for (const q of discoveryQueries) {
+      try {
+        const result = await this.request<NSSuiteQLResponse>('POST', '/query/v1/suiteql', { q });
+        if (result.items?.length > 0) {
+          return result.items
+            .map((row) => {
+              const name = String(
+                row.tableName ?? row.tablename ?? row.TABLE_NAME ?? row.name ?? ''
+              );
+              const label = String(
+                row.tableLabel ?? row.tablelabel ?? row.TABLE_LABEL ?? name
+              );
+              return { name, label: label || name, type: 'table' as const };
+            })
+            .filter((obj) => !!obj.name);
+        }
+      } catch { /* try next */ }
+    }
+
+    // Fallback: well-known NetSuite SuiteQL tables for data integration use-cases.
+    // These are the underlying database tables (not Record API types) and are always
+    // queryable via /query/v1/suiteql even if the metadata catalog is unavailable.
+    return [
+      { name: 'item',                 label: 'Item — all item types',             type: 'table' as const },
+      { name: 'transaction',          label: 'Transaction — all types',           type: 'table' as const },
+      { name: 'transactionLine',      label: 'Transaction Line',                  type: 'table' as const },
+      { name: 'transactionAccountingLine', label: 'Transaction Accounting Line',  type: 'table' as const },
+      { name: 'customer',             label: 'Customer',                          type: 'table' as const },
+      { name: 'contact',              label: 'Contact',                           type: 'table' as const },
+      { name: 'employee',             label: 'Employee',                          type: 'table' as const },
+      { name: 'vendor',               label: 'Vendor',                            type: 'table' as const },
+      { name: 'partner',              label: 'Partner',                           type: 'table' as const },
+      { name: 'account',              label: 'Account — chart of accounts',       type: 'table' as const },
+      { name: 'accountingPeriod',     label: 'Accounting Period',                 type: 'table' as const },
+      { name: 'department',           label: 'Department',                        type: 'table' as const },
+      { name: 'location',             label: 'Location',                          type: 'table' as const },
+      { name: 'subsidiary',           label: 'Subsidiary',                        type: 'table' as const },
+      { name: 'currency',             label: 'Currency',                          type: 'table' as const },
+      { name: 'class',                label: 'Class — classification',            type: 'table' as const },
+      { name: 'opportunity',          label: 'Opportunity',                       type: 'table' as const },
+      { name: 'supportCase',          label: 'Support Case',                      type: 'table' as const },
+      { name: 'project',              label: 'Project',                           type: 'table' as const },
+      { name: 'projectTask',          label: 'Project Task',                      type: 'table' as const },
+      { name: 'billingAccount',       label: 'Billing Account',                   type: 'table' as const },
+      { name: 'priceLevel',           label: 'Price Level',                       type: 'table' as const },
+      { name: 'unitsType',            label: 'Units of Measure',                  type: 'table' as const },
+      { name: 'taxGroup',             label: 'Tax Group',                         type: 'table' as const },
+      { name: 'taxItem',              label: 'Tax Item',                          type: 'table' as const },
+    ];
+  }
+
+  async listObjects(): Promise<ObjectMeta[]> {
+    // Fetch both SuiteQL tables and Record API types in parallel.
+    // SuiteQL tables are returned first (more useful for data querying/syncing).
+    // Record API types that share a name with a SuiteQL table are deduplicated out.
+    const [sqlTables, recordApiObjects] = await Promise.all([
+      this.listSuiteQLTables(),
+      this.listRecordApiObjects(),
+    ]);
+
+    const sqlNames = new Set(sqlTables.map((t) => t.name.toLowerCase()));
+    const filteredRecordApi = recordApiObjects.filter(
+      (obj) => !sqlNames.has(obj.name.toLowerCase())
+    );
+
+    return [...sqlTables, ...filteredRecordApi];
   }
 
   private inferType(value: unknown): string {

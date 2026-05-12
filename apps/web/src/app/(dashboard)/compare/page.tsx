@@ -3,11 +3,11 @@
 import { useState } from 'react';
 import { GitCompare, AlertTriangle } from 'lucide-react';
 import { useConnections } from '@/hooks/useConnections';
-import { useObjects, useSchema } from '@/hooks/useExplorer';
-import { SearchableSelect } from '@/components/ui/searchable-select';
+import { useSchema } from '@/hooks/useExplorer';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { CompareTable } from '@/components/compare/CompareTable';
+import { ConnectionObjectPicker } from '@/components/explorer/ConnectionObjectPicker';
 
 function SchemaEmptyWarning({ objectName }: { objectName: string }) {
   return (
@@ -30,8 +30,6 @@ export default function SchemaComparePage() {
   const [leftObject, setLeftObject] = useState('');
   const [rightObject, setRightObject] = useState('');
 
-  const { data: leftObjectsData, isLoading: loadingLeftObjects } = useObjects(leftConnectionId);
-  const { data: rightObjectsData, isLoading: loadingRightObjects } = useObjects(rightConnectionId);
   const { data: leftSchemaData, isLoading: loadingLeftSchema, isError: leftSchemaError } = useSchema(leftConnectionId, leftObject);
   const { data: rightSchemaData, isLoading: loadingRightSchema, isError: rightSchemaError } = useSchema(rightConnectionId, rightObject);
 
@@ -45,41 +43,6 @@ export default function SchemaComparePage() {
   const leftConnection = connections.find((c) => c.id === leftConnectionId);
   const rightConnection = connections.find((c) => c.id === rightConnectionId);
 
-  const connectionOptions = connections.map((c) => ({
-    value: c.id,
-    label: c.name,
-    suffix: (
-      <Badge variant="outline" className="text-xs capitalize">
-        {c.type}
-      </Badge>
-    ),
-  }));
-
-  const leftObjectOptions = (leftObjectsData?.objects ?? []).map((o) => ({
-    value: o.name,
-    label: o.label || o.name,
-    suffix: (
-      <span className="ml-auto flex items-center gap-1.5 flex-shrink-0">
-        <Badge variant="outline" className="text-xs capitalize">{o.type}</Badge>
-        {o.count != null && (
-          <span className="text-xs text-slate-400 font-mono">{o.count.toLocaleString()}</span>
-        )}
-      </span>
-    ),
-  }));
-
-  const rightObjectOptions = (rightObjectsData?.objects ?? []).map((o) => ({
-    value: o.name,
-    label: o.label || o.name,
-    suffix: (
-      <span className="ml-auto flex items-center gap-1.5 flex-shrink-0">
-        <Badge variant="outline" className="text-xs capitalize">{o.type}</Badge>
-        {o.count != null && (
-          <span className="text-xs text-slate-400 font-mono">{o.count.toLocaleString()}</span>
-        )}
-      </span>
-    ),
-  }));
 
   const bothSelected = !!leftObject && !!rightObject;
   const loadingTable = bothSelected && (loadingLeftSchema || loadingRightSchema);
@@ -96,63 +59,30 @@ export default function SchemaComparePage() {
 
       {/* Connection + Object selectors */}
       <div className="grid grid-cols-2 gap-6">
-        {/* Left panel */}
-        <div className="space-y-3">
-          <div className="flex items-center gap-2 mb-1">
-            <span className="w-2.5 h-2.5 rounded-full bg-indigo-500 flex-shrink-0" />
-            <span className="text-sm font-semibold text-slate-700">Left</span>
-          </div>
-          <SearchableSelect
-            value={leftConnectionId}
-            onValueChange={(v) => {
-              setLeftConnectionId(v);
-              setLeftObject('');
-            }}
-            options={connectionOptions}
-            placeholder="Select connection…"
-            searchPlaceholder="Search connections…"
-            disabled={loadingConnections}
+        <div className="space-y-2">
+          <ConnectionObjectPicker
+            label="Left"
+            dotColorClass="bg-indigo-500"
+            connectionId={leftConnectionId}
+            selectedObject={leftObject}
+            connections={connections}
+            loadingConnections={loadingConnections}
+            onConnectionChange={(v) => { setLeftConnectionId(v); setLeftObject(''); }}
+            onObjectChange={setLeftObject}
           />
-          {leftConnectionId && (
-            <SearchableSelect
-              value={leftObject}
-              onValueChange={setLeftObject}
-              options={leftObjectOptions}
-              placeholder={loadingLeftObjects ? 'Loading objects…' : 'Select object…'}
-              searchPlaceholder="Search objects…"
-              disabled={loadingLeftObjects}
-            />
-          )}
           {leftSchemaEmpty && <SchemaEmptyWarning objectName={leftObject} />}
         </div>
-
-        {/* Right panel */}
-        <div className="space-y-3">
-          <div className="flex items-center gap-2 mb-1">
-            <span className="w-2.5 h-2.5 rounded-full bg-violet-500 flex-shrink-0" />
-            <span className="text-sm font-semibold text-slate-700">Right</span>
-          </div>
-          <SearchableSelect
-            value={rightConnectionId}
-            onValueChange={(v) => {
-              setRightConnectionId(v);
-              setRightObject('');
-            }}
-            options={connectionOptions}
-            placeholder="Select connection…"
-            searchPlaceholder="Search connections…"
-            disabled={loadingConnections}
+        <div className="space-y-2">
+          <ConnectionObjectPicker
+            label="Right"
+            dotColorClass="bg-violet-500"
+            connectionId={rightConnectionId}
+            selectedObject={rightObject}
+            connections={connections}
+            loadingConnections={loadingConnections}
+            onConnectionChange={(v) => { setRightConnectionId(v); setRightObject(''); }}
+            onObjectChange={setRightObject}
           />
-          {rightConnectionId && (
-            <SearchableSelect
-              value={rightObject}
-              onValueChange={setRightObject}
-              options={rightObjectOptions}
-              placeholder={loadingRightObjects ? 'Loading objects…' : 'Select object…'}
-              searchPlaceholder="Search objects…"
-              disabled={loadingRightObjects}
-            />
-          )}
           {rightSchemaEmpty && <SchemaEmptyWarning objectName={rightObject} />}
         </div>
       </div>

@@ -29,7 +29,13 @@ export default function ObjectsPage({ params }: { params: { connectionId: string
               {connection && <ConnectionStatusBadge status={connection.status} />}
             </div>
             <p className="text-slate-500 text-sm mt-0.5">
-              {isLoading ? 'Loading objects…' : `${objectsData?.objects.length ?? 0} objects available`}
+              {isLoading ? 'Loading objects…' : (() => {
+                const all = objectsData?.objects ?? [];
+                const sql = all.filter(o => o.type === 'table').length;
+                const api = all.filter(o => o.type === 'object').length;
+                if (sql > 0 && api > 0) return `${all.length} objects — ${sql} SuiteQL tables, ${api} Record API types`;
+                return `${all.length} objects available`;
+              })()}
             </p>
           </div>
         </div>
