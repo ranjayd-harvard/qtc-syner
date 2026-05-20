@@ -3,16 +3,15 @@ import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai';
 import type { Part, FunctionDeclaration } from '@google/generative-ai';
 import { getDecryptedCredentials } from '@/models/Connection';
 import { connectorClient } from '@/lib/connector-client';
+import { computeMatchAnalysis } from '@/lib/product-syncer-compute';
+import type { PairResult } from '@/lib/product-syncer-compute';
 import type { ConnectionType, RawCredentials } from '@/types/connection';
+
+export type { PairResult as AnalysisResult } from '@/lib/product-syncer-compute';
 
 export const maxDuration = 120;
 
-const SF_OBJECT = 'Product2';
-const NS_OBJECT = 'item';
-const MAX_RECORDS = 2000;
-const PAGE_SIZE = 500;
-
-const SYSTEM_PROMPT = `You are a data sync analyst for the QTC Syncer platform. Your job is to analyze how well Salesforce Product2 records match NetSuite item records.
+const SYSTEM_PROMPT = `You are a data sync analyst for the QTC Syncer platform. Your job is to analyze how well Salesforce records match NetSuite records.
 
 Salesforce is the source of truth. NetSuite may have additional records beyond what's synced from Salesforce.
 
@@ -57,27 +56,9 @@ const TOOL_DECLARATIONS: FunctionDeclaration[] = [
 
 type Creds = { credentials: RawCredentials; type: string };
 
-async function fetchAllRecords(creds: Creds, objectName: string): Promise<Record<string, unknown>[]> {
-  const rows: Record<string, unknown>[] = [];
-  const maxPages = Math.ceil(MAX_RECORDS / PAGE_SIZE);
-
-  for (let page = 1; page <= maxPages; page++) {
-    const result = await connectorClient.data(
-      creds.type as ConnectionType,
-      creds.credentials,
-      objectName,
-      { page, pageSize: PAGE_SIZE }
-    );
-    rows.push(...(result.rows as Record<string, unknown>[]));
-    if (result.rows.length < PAGE_SIZE || rows.length >= result.total) break;
-  }
-
-  return rows;
-}
-
-async function executeGetSchemas(sf: Creds, ns: Creds, nsObject: string) {
+async function executeGetSchemas(sf: Creds, ns: Creds, sfObject: string, nsObject: string) {
   const [sfSchema, nsSchema] = await Promise.all([
-    connectorClient.schema(sf.type as ConnectionType, sf.credentials, SF_OBJECT),
+    connectorClient.schema(sf.type as ConnectionType, sf.credentials, sfObject),
     connectorClient.schema(ns.type as ConnectionType, ns.credentials, nsObject),
   ]);
   return {
@@ -94,60 +75,28 @@ async function executeGetSchemas(sf: Creds, ns: Creds, nsObject: string) {
   };
 }
 
-async function executeComputeMatchAnalysis(sf: Creds, ns: Creds, nsObject: string, sfField: string, nsField: string) {
-  const [sfRows, nsRows] = await Promise.all([
-    fetchAllRecords(sf, SF_OBJECT),
-    fetchAllRecords(ns, nsObject),
-  ]);
-
-  // Build lookup map keyed by nsField value
-  const nsMap = new Map<string, Record<string, unknown>>();
-  for (const row of nsRows) {
-    const key = String(row[nsField] ?? '').trim();
-    if (key) nsMap.set(key, row);
-  }
-
-  const matchedPairs: Array<{ sfRecord: Record<string, unknown>; nsRecord: Record<string, unknown> }> = [];
-  const unmatchedSfRecords: Record<string, unknown>[] = [];
-
-  for (const sfRow of sfRows) {
-    const key = String(sfRow[sfField] ?? '').trim();
-    if (key && nsMap.has(key)) {
-      matchedPairs.push({ sfRecord: sfRow, nsRecord: nsMap.get(key)! });
-    } else {
-      unmatchedSfRecords.push(sfRow);
-    }
-  }
-
+async function executeComputeMatchAnalysis(sf: Creds, ns: Creds, sfObject: string, nsObject: string, sfField: string, nsField: string) {
+  const raw = await computeMatchAnalysis(sf, ns, sfObject, nsObject, sfField, nsField);
   return {
-    sf_total: sfRows.length,
-    ns_total: nsRows.length,
-    matched_count: matchedPairs.length,
-    unmatched_count: unmatchedSfRecords.length,
-    sf_match_field: sfField,
-    ns_match_field: nsField,
-    // Cap arrays to keep response size reasonable
-    matched_pairs: matchedPairs.slice(0, 200),
-    unmatched_sf_records: unmatchedSfRecords.slice(0, 200),
+    sf_total: raw.sfTotal,
+    ns_total: raw.nsTotal,
+    matched_count: raw.matchedCount,
+    unmatched_sf_count: raw.unmatchedSfCount,
+    unmatched_ns_count: raw.unmatchedNsCount,
+    sf_match_field: raw.sfMatchField,
+    ns_match_field: raw.nsMatchField,
+    matched_pairs: raw.matchedPairs,
+    unmatched_sf_records: raw.unmatchedSfRecords,
+    unmatched_ns_records: raw.unmatchedNsRecords,
   };
-}
-
-export interface AnalysisResult {
-  sfTotal: number;
-  nsTotal: number;
-  matchedCount: number;
-  unmatchedCount: number;
-  sfMatchField: string;
-  nsMatchField: string;
-  matchedPairs: Array<{ sfRecord: Record<string, unknown>; nsRecord: Record<string, unknown> }>;
-  unmatchedSfRecords: Record<string, unknown>[];
 }
 
 export async function POST(req: Request) {
   try {
-    const { messages, sfConnectionId, nsConnectionId, nsObject } = await req.json() as {
+    const { messages, sfConnectionId, sfObject, nsConnectionId, nsObject } = await req.json() as {
       messages: Array<{ role: 'user' | 'assistant'; content: string }>;
       sfConnectionId: string;
+      sfObject: string;
       nsConnectionId: string;
       nsObject: string;
     };
@@ -187,7 +136,7 @@ export async function POST(req: Request) {
     let result = await chat.sendMessage(lastMessage.content);
 
     // Agentic tool-call loop
-    let analysisResult: AnalysisResult | null = null;
+    let analysisResult: PairResult | null = null;
 
     while (true) {
       const calls = result.response.functionCalls();
@@ -197,29 +146,32 @@ export async function POST(req: Request) {
         calls.map(async (call) => {
           let response: unknown;
           if (call.name === 'get_schemas') {
-            response = await executeGetSchemas(sfCreds, nsCreds, nsObject);
+            response = await executeGetSchemas(sfCreds, nsCreds, sfObject, nsObject);
           } else if (call.name === 'compute_match_analysis') {
             const args = call.args as { sf_field: string; ns_field: string };
-            const raw = await executeComputeMatchAnalysis(sfCreds, nsCreds, nsObject, args.sf_field, args.ns_field);
+            const raw = await executeComputeMatchAnalysis(sfCreds, nsCreds, sfObject, nsObject, args.sf_field, args.ns_field);
             analysisResult = {
               sfTotal: raw.sf_total,
               nsTotal: raw.ns_total,
               matchedCount: raw.matched_count,
-              unmatchedCount: raw.unmatched_count,
+              unmatchedSfCount: raw.unmatched_sf_count,
+              unmatchedNsCount: raw.unmatched_ns_count,
               sfMatchField: raw.sf_match_field,
               nsMatchField: raw.ns_match_field,
               matchedPairs: raw.matched_pairs,
               unmatchedSfRecords: raw.unmatched_sf_records,
+              unmatchedNsRecords: raw.unmatched_ns_records,
             };
             // Return a summary to the model (not the full data) to keep context manageable
             response = {
               sf_total: raw.sf_total,
               ns_total: raw.ns_total,
               matched_count: raw.matched_count,
-              unmatched_count: raw.unmatched_count,
+              unmatched_sf_count: raw.unmatched_sf_count,
+              unmatched_ns_count: raw.unmatched_ns_count,
               sf_match_field: raw.sf_match_field,
               ns_match_field: raw.ns_match_field,
-              note: `Full data (${raw.matched_pairs.length} matched pairs, ${raw.unmatched_sf_records.length} unmatched records) has been returned to the UI separately.`,
+              note: `Full data returned to UI separately.`,
             };
           } else {
             response = { error: `Unknown tool: ${call.name}` };

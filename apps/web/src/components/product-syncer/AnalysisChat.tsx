@@ -12,6 +12,7 @@ export interface ChatMessage {
 
 interface AnalysisChatProps {
   sfConnectionId: string;
+  sfObject: string;
   nsConnectionId: string;
   nsObject: string;
   onClose: () => void;
@@ -21,13 +22,14 @@ interface AnalysisChatProps {
 async function sendMessage(
   messages: ChatMessage[],
   sfConnectionId: string,
+  sfObject: string,
   nsConnectionId: string,
   nsObject: string
 ): Promise<{ reply: string; analysisResult: AnalysisResult | null }> {
   const res = await fetch('/api/product-syncer/analyze', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ messages, sfConnectionId, nsConnectionId, nsObject }),
+    body: JSON.stringify({ messages, sfConnectionId, sfObject, nsConnectionId, nsObject }),
   });
   if (!res.ok) {
     const err = await res.json();
@@ -36,7 +38,7 @@ async function sendMessage(
   return res.json();
 }
 
-export function AnalysisChat({ sfConnectionId, nsConnectionId, nsObject, onClose, onAnalysisResult }: AnalysisChatProps) {
+export function AnalysisChat({ sfConnectionId, sfObject, nsConnectionId, nsObject, onClose, onAnalysisResult }: AnalysisChatProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -63,14 +65,14 @@ export function AnalysisChat({ sfConnectionId, nsConnectionId, nsObject, onClose
     setMessages([startMsg]);
     setIsLoading(true);
 
-    sendMessage([startMsg], sfConnectionId, nsConnectionId, nsObject)
+    sendMessage([startMsg], sfConnectionId, sfObject, nsConnectionId, nsObject)
       .then(({ reply, analysisResult }) => {
         setMessages((prev) => [...prev, { role: 'assistant', content: reply }]);
         if (analysisResult) onAnalysisResult(analysisResult);
       })
       .catch((err) => setError(String(err)))
       .finally(() => setIsLoading(false));
-  }, [sfConnectionId, nsConnectionId, nsObject, onAnalysisResult]);
+  }, [sfConnectionId, sfObject, nsConnectionId, nsObject, onAnalysisResult]);
 
   const handleSend = useCallback(async () => {
     const text = input.trim();
@@ -84,7 +86,7 @@ export function AnalysisChat({ sfConnectionId, nsConnectionId, nsObject, onClose
     setError(null);
 
     try {
-      const { reply, analysisResult } = await sendMessage(next, sfConnectionId, nsConnectionId, nsObject);
+      const { reply, analysisResult } = await sendMessage(next, sfConnectionId, sfObject, nsConnectionId, nsObject);
       setMessages((prev) => [...prev, { role: 'assistant', content: reply }]);
       if (analysisResult) onAnalysisResult(analysisResult);
     } catch (err) {
@@ -93,7 +95,7 @@ export function AnalysisChat({ sfConnectionId, nsConnectionId, nsObject, onClose
       setIsLoading(false);
       inputRef.current?.focus();
     }
-  }, [input, isLoading, messages, sfConnectionId, nsConnectionId, onAnalysisResult]);
+  }, [input, isLoading, messages, sfConnectionId, sfObject, nsConnectionId, nsObject, onAnalysisResult]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {

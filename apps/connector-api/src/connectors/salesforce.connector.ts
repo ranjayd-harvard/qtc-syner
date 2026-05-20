@@ -41,11 +41,14 @@ export class SalesforceConnector implements BaseConnector {
     }
   }
 
+  // Objects Salesforce marks queryable:false but are practically usable with SOQL
+  private static readonly QUERYABLE_ALLOWLIST = new Set(['PricebookEntry', 'PriceBookEntry']);
+
   async listObjects(): Promise<ObjectMeta[]> {
     const conn = await this.getConnection();
     const result = await conn.describeGlobal();
     return result.sobjects
-      .filter((o) => o.queryable)
+      .filter((o) => o.queryable || SalesforceConnector.QUERYABLE_ALLOWLIST.has(o.name))
       .map((o) => ({
         name: o.name,
         label: o.label,
@@ -69,6 +72,50 @@ export class SalesforceConnector implements BaseConnector {
 
   async fetchData(objectName: string, options: FetchDataOptions): Promise<DataResponse> {
     const conn = await this.getConnection();
+
+    const stripAttrs = (r: Record<string, unknown>) => {
+      const { attributes: _a, ...rest } = r;
+      return rest;
+    };
+
+    // ── Path 1: cursor (queryMore) ────────────────────────────────────────────
+    // Salesforce caps SOQL OFFSET at 2000 for some objects (e.g. PricebookEntry).
+    // After the first streamMode fetch we receive a nextRecordsUrl; subsequent pages
+    // call queryMore which has no OFFSET restriction.
+    if (options.cursor) {
+      const result = await conn.queryMore<Record<string, unknown>>(options.cursor);
+      return {
+        rows: result.records.map(stripAttrs),
+        total: result.totalSize,
+        page: options.page,
+        pageSize: options.pageSize,
+        nextCursor: result.done ? undefined : result.nextRecordsUrl ?? undefined,
+      };
+    }
+
+    // ── Path 2: streamMode (no LIMIT/OFFSET) ──────────────────────────────────
+    // Used on the first bulk-fetch page. Omitting LIMIT causes Salesforce to set
+    // nextRecordsUrl on the response (batched at ~2000 internally), giving us a
+    // cursor we can follow without hitting the OFFSET cap.
+    if (options.streamMode) {
+      const meta = await conn.sobject(objectName).describe();
+      const fields = meta.fields.slice(0, 20).map((f) => f.name);
+      let soql = `SELECT ${fields.join(', ')} FROM ${objectName}`;
+      if (options.filter) {
+        soql += ` WHERE Name LIKE '%${options.filter.replace(/'/g, "\\'")}%'`;
+      }
+      const result = await conn.query<Record<string, unknown>>(soql);
+      const rows = result.records.map(stripAttrs);
+      return {
+        rows,
+        total: result.totalSize,
+        page: 1,
+        pageSize: rows.length,
+        nextCursor: result.done ? undefined : result.nextRecordsUrl ?? undefined,
+      };
+    }
+
+    // ── Path 3: standard OFFSET pagination (Explorer UI) ─────────────────────
     const meta = await conn.sobject(objectName).describe();
     const fields = meta.fields.slice(0, 20).map((f) => f.name);
     const fieldList = fields.join(', ');
@@ -90,14 +137,8 @@ export class SalesforceConnector implements BaseConnector {
       conn.query<Record<string, unknown>>(countSoql),
     ]);
 
-    const rows = result.records.map((r) => {
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      const { attributes: _a, ...rest } = r as Record<string, unknown>;
-      return rest;
-    });
-
     return {
-      rows,
+      rows: result.records.map(stripAttrs),
       total: countResult.totalSize,
       page: options.page,
       pageSize: options.pageSize,

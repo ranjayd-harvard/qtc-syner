@@ -59,6 +59,8 @@ export interface FetchDataOptions {
   pageSize: number;
   sort?: SortSpec;
   filter?: string;
+  cursor?: string;    // jsforce queryMore URL — bypasses OFFSET when provided
+  streamMode?: boolean; // skip LIMIT/OFFSET so Salesforce sets nextRecordsUrl on the result
 }
 
 export interface DataResponse {
@@ -66,12 +68,14 @@ export interface DataResponse {
   total: number;
   page: number;
   pageSize: number;
+  nextCursor?: string; // set when more records exist beyond this page (Salesforce only)
 }
 
 export interface QueryResponse {
   rows: DataRow[];
   total: number;
   columns: string[];
+  hasMore?: boolean; // reliable "more pages" signal — set by connectors that return it natively
 }
 
 export interface TestResult {

@@ -15,6 +15,8 @@ const schema = z.object({
       direction: z.enum(['asc', 'desc']),
     }).optional(),
     filter: z.string().optional(),
+    cursor: z.string().optional(),
+    streamMode: z.boolean().optional(),
   }),
 });
 

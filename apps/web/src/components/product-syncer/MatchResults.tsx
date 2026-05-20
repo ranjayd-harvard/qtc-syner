@@ -110,7 +110,7 @@ export function MatchResults({ result }: MatchResultsProps) {
           onClick={() => setTab('unmatched')}
         >
           Unmatched in Salesforce
-          <Badge variant="secondary" className="ml-2 bg-amber-100 text-amber-700">{result.unmatchedCount}</Badge>
+          <Badge variant="secondary" className="ml-2 bg-amber-100 text-amber-700">{result.unmatchedSfCount}</Badge>
         </button>
         <div className="ml-auto flex gap-2 py-1.5">
           {tab === 'matched' && result.matchedPairs.length > 0 && (
@@ -216,7 +216,7 @@ export function MatchResults({ result }: MatchResultsProps) {
         </>
       )}
 
-      {result.matchedCount > 200 || result.unmatchedCount > 200 ? (
+      {result.matchedCount > 200 || result.unmatchedSfCount > 200 ? (
         <p className="text-xs text-slate-400 text-center py-2 border-t border-slate-100">
           Showing first 200 rows — export CSV for the full dataset
         </p>

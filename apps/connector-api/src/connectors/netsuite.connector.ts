@@ -146,10 +146,10 @@ export class NetSuiteConnector implements BaseConnector {
       { name: 'project',              label: 'Project',                           type: 'table' as const },
       { name: 'projectTask',          label: 'Project Task',                      type: 'table' as const },
       { name: 'billingAccount',       label: 'Billing Account',                   type: 'table' as const },
-      { name: 'priceLevel',           label: 'Price Level',                       type: 'table' as const },
       { name: 'unitsType',            label: 'Units of Measure',                  type: 'table' as const },
       { name: 'taxGroup',             label: 'Tax Group',                         type: 'table' as const },
       { name: 'taxItem',              label: 'Tax Item',                          type: 'table' as const },
+      { name: 'pricing',             label: 'Pricing — item price by level',      type: 'table' as const },
     ];
   }
 
@@ -240,28 +240,69 @@ export class NetSuiteConnector implements BaseConnector {
     }
     sql += ` OFFSET ${offset} ROWS FETCH NEXT ${options.pageSize} ROWS ONLY`;
 
-    const result = await this.request<NSSuiteQLResponse>('POST', '/query/v1/suiteql', { q: sql });
-    return {
-      rows: result.items,
-      total: result.totalResults,
-      page: options.page,
-      pageSize: options.pageSize,
-    };
+    try {
+      const result = await this.request<NSSuiteQLResponse>('POST', '/query/v1/suiteql', { q: sql });
+      return {
+        rows: result.items,
+        total: result.totalResults,
+        page: options.page,
+        pageSize: options.pageSize,
+      };
+    } catch (err) {
+      // SuiteQL doesn't know this table — fall back to the Record API collection endpoint
+      const errMsg = err instanceof Error ? err.message : '';
+      const isNotFound = /not found|INVALID_PARAMETER|invalid.*table|unknown.*table/i.test(errMsg);
+      if (!isNotFound) throw err;
+
+      interface NSRecordCollection {
+        items: Record<string, unknown>[];
+        totalResults: number;
+        count: number;
+      }
+      const params = new URLSearchParams({
+        limit: String(options.pageSize),
+        offset: String(offset),
+      });
+      if (options.sort) {
+        params.set('sort', options.sort.field);
+        params.set('order', options.sort.direction.toUpperCase());
+      }
+      if (options.filter) params.set('q', `name CONTAIN "${options.filter}"`);
+
+      const collection = await this.request<NSRecordCollection>(
+        'GET',
+        `/record/v1/${objectName}?${params.toString()}`
+      );
+      return {
+        rows: collection.items ?? [],
+        total: collection.totalResults ?? collection.count ?? 0,
+        page: options.page,
+        pageSize: options.pageSize,
+      };
+    }
   }
 
   async executeQuery(query: string, options: { page: number; pageSize: number }): Promise<QueryResponse> {
     interface NSSuiteQLResponse {
       items: Record<string, unknown>[];
       totalResults: number;
+      hasMore?: boolean;
     }
-    const offset = (options.page - 1) * options.pageSize;
-    let sql = query.trim().replace(/;$/, '');
-    if (!/OFFSET\s+\d+/i.test(sql)) {
-      sql += ` OFFSET ${offset} ROWS FETCH NEXT ${options.pageSize} ROWS ONLY`;
+    const sql = query.trim().replace(/;$/, '');
+    const alreadyPaginated = /OFFSET\s+\d+|FETCH\s+NEXT/i.test(sql);
+
+    let result: NSSuiteQLResponse;
+    if (alreadyPaginated) {
+      // Query has its own OFFSET/FETCH — run as-is, no API-level pagination
+      result = await this.request<NSSuiteQLResponse>('POST', '/query/v1/suiteql', { q: sql });
+    } else {
+      // Use NetSuite API-level pagination (?limit=&offset=) so hasMore is reliable
+      const offset = (options.page - 1) * options.pageSize;
+      const path = `/query/v1/suiteql?limit=${options.pageSize}&offset=${offset}`;
+      result = await this.request<NSSuiteQLResponse>('POST', path, { q: sql });
     }
 
-    const result = await this.request<NSSuiteQLResponse>('POST', '/query/v1/suiteql', { q: sql });
     const columns = result.items.length > 0 ? Object.keys(result.items[0]) : [];
-    return { rows: result.items, total: result.totalResults, columns };
+    return { rows: result.items, total: result.totalResults, hasMore: result.hasMore, columns };
   }
 }

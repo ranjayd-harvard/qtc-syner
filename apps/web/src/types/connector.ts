@@ -21,17 +21,28 @@ export interface SortSpec {
   direction: 'asc' | 'desc';
 }
 
+export interface FetchDataOptions {
+  page: number;
+  pageSize: number;
+  sort?: SortSpec;
+  filter?: string;
+  cursor?: string;
+  streamMode?: boolean;
+}
+
 export interface DataResponse {
   rows: DataRow[];
   total: number;
   page: number;
   pageSize: number;
+  nextCursor?: string;
 }
 
 export interface QueryResponse {
   rows: DataRow[];
   total: number;
   columns: string[];
+  hasMore?: boolean;
 }
 
 export interface TestResult {

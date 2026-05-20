@@ -8,8 +8,14 @@ export interface ProductSyncerMappingDocument {
   name: string;
   sfConnectionId: string;
   sfConnectionName: string;
+  sfDataMode?: 'object' | 'soql';
+  sfObject: string;
+  sfQuery?: string;
   nsConnectionId: string;
   nsConnectionName: string;
+  nsDataMode?: 'object' | 'suiteql';
+  nsObject: string;
+  nsQuery?: string;
   fieldMappings: FieldMappingEntry[];
   createdAt: Date;
   updatedAt: Date;
@@ -20,8 +26,14 @@ export interface ProductSyncerMappingSummary {
   name: string;
   sfConnectionId: string;
   sfConnectionName: string;
+  sfDataMode: 'object' | 'soql';
+  sfObject: string;
+  sfQuery?: string;
   nsConnectionId: string;
   nsConnectionName: string;
+  nsDataMode: 'object' | 'suiteql';
+  nsObject: string;
+  nsQuery?: string;
   fieldMappings: FieldMappingEntry[];
   createdAt: string;
   updatedAt: string;
@@ -31,8 +43,14 @@ export interface CreateProductSyncerMappingData {
   name: string;
   sfConnectionId: string;
   sfConnectionName: string;
+  sfDataMode: 'object' | 'soql';
+  sfObject: string;
+  sfQuery?: string;
   nsConnectionId: string;
   nsConnectionName: string;
+  nsDataMode: 'object' | 'suiteql';
+  nsObject: string;
+  nsQuery?: string;
   fieldMappings: FieldMappingEntry[];
 }
 
@@ -42,8 +60,14 @@ function toSummary(doc: ProductSyncerMappingDocument): ProductSyncerMappingSumma
     name: doc.name,
     sfConnectionId: doc.sfConnectionId,
     sfConnectionName: doc.sfConnectionName,
+    sfDataMode: doc.sfDataMode ?? 'object',
+    sfObject: doc.sfObject ?? '',
+    sfQuery: doc.sfQuery,
     nsConnectionId: doc.nsConnectionId,
     nsConnectionName: doc.nsConnectionName,
+    nsDataMode: doc.nsDataMode ?? 'object',
+    nsObject: doc.nsObject ?? '',
+    nsQuery: doc.nsQuery,
     fieldMappings: doc.fieldMappings,
     createdAt: doc.createdAt.toISOString(),
     updatedAt: doc.updatedAt.toISOString(),
