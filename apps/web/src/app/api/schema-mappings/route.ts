@@ -12,8 +12,9 @@ const mappingSchema = z.object({
   targetObject: z.string().min(1),
   fieldMappings: z.array(
     z.object({
-      sourceField: z.string().min(1),
-      targetField: z.string().min(1),
+      sourceFields: z.array(z.string().min(1)).min(1),
+      targetFields: z.array(z.string().min(1)).min(1),
+      condition: z.enum(['AND', 'OR']).optional(),
     })
   ),
 });

@@ -2,8 +2,9 @@ import type { ObjectId } from 'mongodb';
 import { getDb } from '@/lib/mongodb';
 
 export interface FieldMappingEntry {
-  sourceField: string;
-  targetField: string;
+  sourceFields: string[];
+  targetFields: string[];
+  condition?: 'AND' | 'OR';
 }
 
 export interface SchemaMappingDocument {
@@ -55,7 +56,14 @@ function toSummary(doc: SchemaMappingDocument): SchemaMappingSummary {
     targetConnectionId: doc.targetConnectionId,
     targetConnectionName: doc.targetConnectionName,
     targetObject: doc.targetObject,
-    fieldMappings: doc.fieldMappings,
+    fieldMappings: doc.fieldMappings.map((fm) => {
+      const raw = fm as unknown as Record<string, unknown>;
+      return {
+        sourceFields: fm.sourceFields ?? (raw.sourceField ? [raw.sourceField as string] : []),
+        targetFields: fm.targetFields ?? (raw.targetField ? [raw.targetField as string] : []),
+        condition: fm.condition,
+      };
+    }),
     createdAt: doc.createdAt.toISOString(),
     updatedAt: doc.updatedAt.toISOString(),
   };

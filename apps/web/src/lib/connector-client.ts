@@ -1,6 +1,25 @@
 import type { TestResult, ObjectMeta, FieldMeta, DataResponse, QueryResponse, FetchDataOptions } from '@/types/connector';
 import type { ConnectionType, RawCredentials } from '@/types/connection';
 
+export interface UpsertOptions {
+  mode: 'create' | 'update' | 'upsert';
+  externalIdField?: string;
+}
+
+export interface UpsertRecordResult {
+  index: number;
+  success: boolean;
+  id?: string;
+  error?: string;
+}
+
+export interface UpsertResult {
+  created: number;
+  updated: number;
+  failed: number;
+  results: UpsertRecordResult[];
+}
+
 const BASE = process.env.CONNECTOR_API_URL!;
 const KEY = process.env.CONNECTOR_INTERNAL_KEY!;
 
@@ -51,8 +70,18 @@ export const connectorClient = {
     type: ConnectionType,
     credentials: RawCredentials,
     query: string,
-    options: { page: number; pageSize: number }
+    options: { page: number; pageSize: number; cursor?: string }
   ): Promise<QueryResponse> {
     return post('/api/query', { type, credentials, query, options });
+  },
+
+  upsertRecords(
+    type: ConnectionType,
+    credentials: RawCredentials,
+    objectName: string,
+    records: Record<string, unknown>[],
+    options: UpsertOptions
+  ): Promise<UpsertResult> {
+    return post('/api/upsert', { type, credentials, objectName, records, options });
   },
 };

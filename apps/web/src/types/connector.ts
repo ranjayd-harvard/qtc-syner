@@ -43,6 +43,7 @@ export interface QueryResponse {
   total: number;
   columns: string[];
   hasMore?: boolean;
+  nextCursor?: string;
 }
 
 export interface TestResult {

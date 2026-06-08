@@ -5,10 +5,10 @@ export const maxDuration = 60;
 
 export async function POST(req: Request) {
   try {
-    const { sfField, nsField, nsObject, matchedCount, unmatchedCount, unmatchedSfSample, nsSample } =
+    const { sfFields, nsFields, nsObject, matchedCount, unmatchedCount, unmatchedSfSample, nsSample } =
       await req.json() as {
-        sfField: string;
-        nsField: string;
+        sfFields: string[];
+        nsFields: string[];
         nsObject: string;
         matchedCount: number;
         unmatchedCount: number;
@@ -23,28 +23,30 @@ export async function POST(req: Request) {
       );
     }
 
+    const sfLabel = sfFields.join(' + ');
+    const nsLabel = nsFields.join(' + ');
+
+    // For composite keys, show the concatenated value of all mapped fields per record
     const sfValues = unmatchedSfSample
       .slice(0, 20)
-      .map((r) => r[sfField])
-      .filter((v) => v != null)
-      .map(String);
+      .map((r) => sfFields.map((f) => String(r[f] ?? '')).join(' | '))
+      .filter((v) => v.replace(/\|/g, '').trim());
 
     const nsValues = nsSample
       .slice(0, 20)
-      .map((r) => r[nsField])
-      .filter((v) => v != null)
-      .map(String);
+      .map((r) => nsFields.map((f) => String(r[f] ?? '')).join(' | '))
+      .filter((v) => v.replace(/\|/g, '').trim());
 
     const prompt = `You are a data quality analyst for a QTC system. Analyze why Salesforce Product2 records don't match NetSuite ${nsObject} records.
 
-Match field pair: Salesforce "${sfField}" ↔ NetSuite "${nsField}"
+Match field pair: Salesforce "${sfLabel}" ↔ NetSuite "${nsLabel}"
 
 Results: ${matchedCount} matched, ${unmatchedCount} unmatched in Salesforce
 
-Sample of unmatched Salesforce "${sfField}" values — these exist in SF but not in NS (${sfValues.length} shown):
+Sample of unmatched Salesforce "${sfLabel}" values — these exist in SF but not in NS (${sfValues.length} shown):
 ${sfValues.map((v) => `  - ${v}`).join('\n') || '  (none with non-null values)'}
 
-Sample of unmatched NetSuite "${nsField}" values — these exist in NS but not in SF (${nsValues.length} shown):
+Sample of unmatched NetSuite "${nsLabel}" values — these exist in NS but not in SF (${nsValues.length} shown):
 ${nsValues.map((v) => `  - ${v}`).join('\n') || '  (none with non-null values)'}
 
 Please provide:

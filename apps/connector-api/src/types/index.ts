@@ -76,6 +76,7 @@ export interface QueryResponse {
   total: number;
   columns: string[];
   hasMore?: boolean; // reliable "more pages" signal — set by connectors that return it natively
+  nextCursor?: string; // Salesforce queryMore URL — avoids OFFSET cap on subsequent pages
 }
 
 export interface TestResult {
@@ -96,4 +97,31 @@ export interface DataRequest extends ConnectorRequest {
 export interface QueryRequest extends ConnectorRequest {
   query: string;
   options: { page: number; pageSize: number };
+}
+
+export type UpsertMode = 'create' | 'update' | 'upsert';
+
+export interface UpsertOptions {
+  mode: UpsertMode;
+  externalIdField?: string;
+}
+
+export interface UpsertRecordResult {
+  index: number;
+  success: boolean;
+  id?: string;
+  error?: string;
+}
+
+export interface UpsertResult {
+  created: number;
+  updated: number;
+  failed: number;
+  results: UpsertRecordResult[];
+}
+
+export interface UpsertRequest extends ConnectorRequest {
+  objectName: string;
+  records: DataRow[];
+  options: UpsertOptions;
 }

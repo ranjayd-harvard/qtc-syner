@@ -6,8 +6,11 @@ import type {
   ObjectMeta,
   FieldMeta,
   DataResponse,
+  DataRow,
   QueryResponse,
   FetchDataOptions,
+  UpsertOptions,
+  UpsertResult,
 } from '../types/index.js';
 
 export class RedshiftConnector implements BaseConnector {
@@ -153,7 +156,7 @@ export class RedshiftConnector implements BaseConnector {
     }
   }
 
-  async executeQuery(query: string, options: { page: number; pageSize: number }): Promise<QueryResponse> {
+  async executeQuery(query: string, options: { page: number; pageSize: number; cursor?: string }): Promise<QueryResponse> {
     const pool = this.createPool();
     try {
       const client = await pool.connect();
@@ -176,5 +179,9 @@ export class RedshiftConnector implements BaseConnector {
     } finally {
       await pool.end();
     }
+  }
+
+  async upsertRecords(_objectName: string, _records: DataRow[], _options: UpsertOptions): Promise<UpsertResult> {
+    throw new Error('Upsert is not supported for Redshift connections');
   }
 }

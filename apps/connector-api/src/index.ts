@@ -8,6 +8,7 @@ import objectsRouter from './routes/objects.js';
 import dataRouter from './routes/data.js';
 import schemaRouter from './routes/schema.js';
 import queryRouter from './routes/query.js';
+import upsertRouter from './routes/upsert.js';
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -25,6 +26,7 @@ app.use('/api/objects', objectsRouter);
 app.use('/api/data', dataRouter);
 app.use('/api/schema', schemaRouter);
 app.use('/api/query', queryRouter);
+app.use('/api/upsert', upsertRouter);
 
 app.use(errorMiddleware);
 

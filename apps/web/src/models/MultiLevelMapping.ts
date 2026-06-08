@@ -2,8 +2,9 @@ import type { ObjectId } from 'mongodb';
 import { getDb } from '@/lib/mongodb';
 
 export interface FieldMappingEntry {
-  sourceField: string;
-  targetField: string;
+  sourceFields: string[];
+  targetFields: string[];
+  condition?: 'AND' | 'OR';
 }
 
 export interface LevelConfig {
@@ -52,8 +53,22 @@ function toSummary(doc: MultiLevelMappingDocument): MultiLevelMappingSummary {
     level1: doc.level1,
     level2: doc.level2,
     level3: doc.level3,
-    l1ToL2Mappings: doc.l1ToL2Mappings,
-    l2ToL3Mappings: doc.l2ToL3Mappings,
+    l1ToL2Mappings: doc.l1ToL2Mappings.map((fm) => {
+      const raw = fm as unknown as Record<string, unknown>;
+      return {
+        sourceFields: fm.sourceFields ?? (raw.sourceField ? [raw.sourceField as string] : []),
+        targetFields: fm.targetFields ?? (raw.targetField ? [raw.targetField as string] : []),
+        condition: fm.condition,
+      };
+    }),
+    l2ToL3Mappings: doc.l2ToL3Mappings.map((fm) => {
+      const raw = fm as unknown as Record<string, unknown>;
+      return {
+        sourceFields: fm.sourceFields ?? (raw.sourceField ? [raw.sourceField as string] : []),
+        targetFields: fm.targetFields ?? (raw.targetField ? [raw.targetField as string] : []),
+        condition: fm.condition,
+      };
+    }),
     createdAt: doc.createdAt.toISOString(),
     updatedAt: doc.updatedAt.toISOString(),
   };

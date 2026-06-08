@@ -68,7 +68,15 @@ function toSummary(doc: ProductSyncerMappingDocument): ProductSyncerMappingSumma
     nsDataMode: doc.nsDataMode ?? 'object',
     nsObject: doc.nsObject ?? '',
     nsQuery: doc.nsQuery,
-    fieldMappings: doc.fieldMappings,
+    // Coerce old documents that stored sourceField/targetField (strings) to the new array format
+    fieldMappings: doc.fieldMappings.map((fm) => {
+      const raw = fm as unknown as Record<string, unknown>;
+      return {
+        sourceFields: fm.sourceFields ?? (raw.sourceField ? [raw.sourceField as string] : []),
+        targetFields: fm.targetFields ?? (raw.targetField ? [raw.targetField as string] : []),
+        condition: fm.condition,
+      };
+    }),
     createdAt: doc.createdAt.toISOString(),
     updatedAt: doc.updatedAt.toISOString(),
   };

@@ -7,8 +7,12 @@ import type {
   ObjectMeta,
   FieldMeta,
   DataResponse,
+  DataRow,
   QueryResponse,
   FetchDataOptions,
+  UpsertOptions,
+  UpsertResult,
+  UpsertRecordResult,
 } from '../types/index.js';
 
 export class NetSuiteConnector implements BaseConnector {
@@ -282,7 +286,80 @@ export class NetSuiteConnector implements BaseConnector {
     }
   }
 
-  async executeQuery(query: string, options: { page: number; pageSize: number }): Promise<QueryResponse> {
+  private async writeRecord(method: 'POST' | 'PATCH' | 'PUT', path: string, body: Record<string, unknown>): Promise<string | undefined> {
+    const url = `${this.baseUrl}${path}`;
+    const res = await fetch(url, {
+      method,
+      headers: {
+        Authorization: this.getAuthHeader(method, url),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      // Extract the human-readable detail from NetSuite's structured error JSON
+      let detail = text;
+      try {
+        const parsed = JSON.parse(text) as { 'o:errorDetails'?: { detail: string }[] };
+        const first = parsed['o:errorDetails']?.[0];
+        if (first?.detail) detail = first.detail;
+      } catch { /* leave detail as raw text */ }
+      throw new Error(`NetSuite ${method} error ${res.status}: ${detail}`);
+    }
+    // 204 No Content — extract created record ID from Location header
+    const location = res.headers.get('Location');
+    return location ? location.split('/').pop() : undefined;
+  }
+
+  async upsertRecords(objectName: string, records: DataRow[], options: UpsertOptions): Promise<UpsertResult> {
+    const result: UpsertResult = { created: 0, updated: 0, failed: 0, results: [] };
+    const CONCURRENCY = 5;
+
+    const processOne = async (record: DataRow, index: number): Promise<UpsertRecordResult> => {
+      try {
+        if (options.mode === 'create') {
+          const { id: _id, ...body } = record as Record<string, unknown>;
+          const id = await this.writeRecord('POST', `/record/v1/${objectName}`, body);
+          return { index, success: true, id };
+        }
+        if (options.mode === 'update') {
+          const { id, ...body } = record as Record<string, unknown>;
+          if (!id) return { index, success: false, error: 'Record missing id field for update' };
+          await this.writeRecord('PATCH', `/record/v1/${objectName}/${id}`, body);
+          return { index, success: true, id: String(id) };
+        }
+        if (options.mode === 'upsert' && options.externalIdField) {
+          const extVal = (record as Record<string, unknown>)[options.externalIdField];
+          if (!extVal) return { index, success: false, error: `Record missing ${options.externalIdField} for upsert` };
+          const { id: _id, ...body } = record as Record<string, unknown>;
+          await this.writeRecord('PUT', `/record/v1/${objectName}?externalId=${options.externalIdField}&externalIdValue=${encodeURIComponent(String(extVal))}`, body);
+          return { index, success: true };
+        }
+        return { index, success: false, error: 'Invalid upsert options' };
+      } catch (err) {
+        return { index, success: false, error: String(err) };
+      }
+    };
+
+    for (let i = 0; i < records.length; i += CONCURRENCY) {
+      const batch = records.slice(i, i + CONCURRENCY);
+      const batchResults = await Promise.all(batch.map((r, j) => processOne(r, i + j)));
+      for (const r of batchResults) {
+        if (r.success) {
+          if (options.mode === 'create') result.created++;
+          else result.updated++;
+        } else {
+          result.failed++;
+        }
+        result.results.push(r);
+      }
+    }
+
+    return result;
+  }
+
+  async executeQuery(query: string, options: { page: number; pageSize: number; cursor?: string }): Promise<QueryResponse> {
     interface NSSuiteQLResponse {
       items: Record<string, unknown>[];
       totalResults: number;

@@ -78,12 +78,12 @@ export function MatchResults({ result }: MatchResultsProps) {
 
   const sfKeys =
     result.matchedPairs.length > 0
-      ? previewKeys(result.matchedPairs[0].sfRecord, result.sfMatchField)
-      : previewKeys(result.unmatchedSfRecords[0] ?? {}, result.sfMatchField);
+      ? previewKeys(result.matchedPairs[0].sfRecord, result.sfMatchFields[0] ?? '')
+      : previewKeys(result.unmatchedSfRecords[0] ?? {}, result.sfMatchFields[0] ?? '');
 
   const nsKeys =
     result.matchedPairs.length > 0
-      ? previewKeys(result.matchedPairs[0].nsRecord, result.nsMatchField)
+      ? previewKeys(result.matchedPairs[0].nsRecord, result.nsMatchFields[0] ?? '')
       : [];
 
   return (

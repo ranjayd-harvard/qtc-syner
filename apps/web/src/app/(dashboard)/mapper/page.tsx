@@ -76,7 +76,11 @@ export default function SchemaMapperPage() {
       setTargetConnectionId(editingMapping.targetConnectionId);
       setTargetObject(editingMapping.targetObject);
       setMappingName(editingMapping.name);
-      setCurrentMappings(editingMapping.fieldMappings);
+      // Convert model-level entries (sourceFields[], targetFields[]) to canvas edges (single fields)
+      setCurrentMappings(editingMapping.fieldMappings.map((fm) => ({
+        sourceField: fm.sourceFields[0] ?? '',
+        targetField: fm.targetFields[0] ?? '',
+      })));
     }
   }, [editingMapping, mode]);
 
@@ -112,7 +116,11 @@ export default function SchemaMapperPage() {
       targetConnectionId,
       targetConnectionName: targetConn?.name ?? targetConnectionId,
       targetObject,
-      fieldMappings: currentMappings,
+      // Canvas uses 1:1 edges; wrap each in single-element arrays for the model
+      fieldMappings: currentMappings.map((m) => ({
+        sourceFields: [m.sourceField],
+        targetFields: [m.targetField],
+      })),
     };
     if (mode === 'edit' && editingId) {
       updateMutation.mutate({ id: editingId, data }, { onSuccess: () => setMode('list') });

@@ -1,8 +1,9 @@
 import { z } from 'zod';
 
 export const fieldMappingSchema = z.object({
-  sourceField: z.string().min(1),
-  targetField: z.string().min(1),
+  sourceFields: z.array(z.string().min(1)).min(1),
+  targetFields: z.array(z.string().min(1)).min(1),
+  condition: z.enum(['AND', 'OR']).optional(),
 });
 
 export const productSyncerMappingSchema = z.object({

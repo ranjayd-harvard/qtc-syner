@@ -13,8 +13,8 @@ export interface PairResult {
   matchedCount: number;
   unmatchedSfCount: number;
   unmatchedNsCount: number;
-  sfMatchField: string;
-  nsMatchField: string;
+  sfMatchFields: string[];
+  nsMatchFields: string[];
   matchedPairs: Array<{ sfRecord: Record<string, unknown>; nsRecord: Record<string, unknown> }>;
   unmatchedSfRecords: Record<string, unknown>[];
   unmatchedNsRecords: Record<string, unknown>[];
@@ -34,6 +34,9 @@ export async function fetchAllRecordsByQuery(
   const { limit, onPage } = options;
   const cap = limit ?? SAFETY_CAP;
   const rows: Record<string, unknown>[] = [];
+  // Salesforce returns a queryMore cursor on page 1; we follow it instead of using
+  // OFFSET, which is capped at 2000 for Account and several other SF objects.
+  let cursor: string | undefined;
 
   for (let page = 1; rows.length < cap; page++) {
     onPage?.(page, rows.length);
@@ -41,14 +44,15 @@ export async function fetchAllRecordsByQuery(
       creds.type as ConnectionType,
       creds.credentials,
       query,
-      { page, pageSize: PAGE_SIZE }
+      { page, pageSize: PAGE_SIZE, cursor }
     );
     rows.push(...(result.rows as Record<string, unknown>[]));
+    cursor = result.nextCursor;
 
     // hasMore is the most reliable signal (NS SuiteQL provides it natively).
-    // Fall back to short-page detection when hasMore is absent (e.g. Salesforce SOQL).
     if (result.hasMore === false) break;
-    if (result.hasMore === undefined && result.rows.length < PAGE_SIZE) break;
+    // Cursor exhausted + no hasMore signal — use short-page detection.
+    if (!cursor && result.hasMore === undefined && result.rows.length < PAGE_SIZE) break;
     // total is only reliable when it exceeds page size (NS SuiteQL total = page count)
     if (result.total > PAGE_SIZE && rows.length >= result.total) break;
   }
@@ -96,38 +100,76 @@ export async function fetchAllRecords(
   return limit ? rows.slice(0, limit) : rows;
 }
 
+// Build a composite key from multiple field values joined with a null-byte separator.
+// Null bytes are extremely unlikely in real data, making them safe as a key separator.
+function compositeKey(row: Record<string, unknown>, fields: string[]): string {
+  return fields.map((f) => String(row[f] ?? '').trim()).join('\0');
+}
+
 // Pure synchronous match computation — call this after fetching rows separately.
 // Returns ALL matched/unmatched rows; clients do their own display-level slicing.
+// Supports composite keys (AND) and per-field OR matching.
 export function computeMatchesFromRows(
   sfRows: Record<string, unknown>[],
   nsRows: Record<string, unknown>[],
-  sfField: string,
-  nsField: string
+  sfFields: string[],
+  nsFields: string[],
+  condition: 'AND' | 'OR' = 'AND'
 ): PairResult {
-  const nsMap = new Map<string, Record<string, unknown>>();
-  for (const row of nsRows) {
-    const key = String(row[nsField] ?? '').trim();
-    if (key) nsMap.set(key, row);
-  }
-
   const matchedPairs: Array<{ sfRecord: Record<string, unknown>; nsRecord: Record<string, unknown> }> = [];
   const unmatchedSfRecords: Record<string, unknown>[] = [];
-  const matchedNsKeys = new Set<string>();
+  const matchedNsObjects = new Set<Record<string, unknown>>();
 
-  for (const sfRow of sfRows) {
-    const key = String(sfRow[sfField] ?? '').trim();
-    if (key && nsMap.has(key)) {
-      matchedPairs.push({ sfRecord: sfRow, nsRecord: nsMap.get(key)! });
-      matchedNsKeys.add(key);
-    } else {
-      unmatchedSfRecords.push(sfRow);
+  if (condition === 'OR') {
+    // Build one lookup map per field index: NS field[i] value → first NS row with that value
+    const nsMaps: Map<string, Record<string, unknown>>[] = sfFields.map((_, i) => {
+      const m = new Map<string, Record<string, unknown>>();
+      for (const row of nsRows) {
+        const val = String(row[nsFields[i]] ?? '').trim();
+        if (val) m.set(val, row);
+      }
+      return m;
+    });
+
+    for (const sfRow of sfRows) {
+      let matchedNsRow: Record<string, unknown> | undefined;
+      for (let i = 0; i < sfFields.length; i++) {
+        const sfVal = String(sfRow[sfFields[i]] ?? '').trim();
+        if (sfVal && nsMaps[i].has(sfVal)) {
+          matchedNsRow = nsMaps[i].get(sfVal);
+          break;
+        }
+      }
+      if (matchedNsRow) {
+        matchedPairs.push({ sfRecord: sfRow, nsRecord: matchedNsRow });
+        matchedNsObjects.add(matchedNsRow);
+      } else {
+        unmatchedSfRecords.push(sfRow);
+      }
+    }
+  } else {
+    // AND: composite key — all fields must match simultaneously
+    const nsMap = new Map<string, Record<string, unknown>>();
+    for (const row of nsRows) {
+      const key = compositeKey(row, nsFields);
+      if (key.replace(/\0/g, '').trim()) nsMap.set(key, row);
+    }
+    const matchedNsKeys = new Set<string>();
+
+    for (const sfRow of sfRows) {
+      const key = compositeKey(sfRow, sfFields);
+      if (key.replace(/\0/g, '').trim() && nsMap.has(key)) {
+        const nsRow = nsMap.get(key)!;
+        matchedPairs.push({ sfRecord: sfRow, nsRecord: nsRow });
+        matchedNsKeys.add(key);
+        matchedNsObjects.add(nsRow);
+      } else {
+        unmatchedSfRecords.push(sfRow);
+      }
     }
   }
 
-  const unmatchedNsRecords = nsRows.filter((row) => {
-    const key = String(row[nsField] ?? '').trim();
-    return !matchedNsKeys.has(key);
-  });
+  const unmatchedNsRecords = nsRows.filter((row) => !matchedNsObjects.has(row));
 
   return {
     sfTotal: sfRows.length,
@@ -135,8 +177,8 @@ export function computeMatchesFromRows(
     matchedCount: matchedPairs.length,
     unmatchedSfCount: unmatchedSfRecords.length,
     unmatchedNsCount: unmatchedNsRecords.length,
-    sfMatchField: sfField,
-    nsMatchField: nsField,
+    sfMatchFields: sfFields,
+    nsMatchFields: nsFields,
     matchedPairs,
     unmatchedSfRecords,
     unmatchedNsRecords,
@@ -156,5 +198,5 @@ export async function computeMatchAnalysis(
     fetchAllRecords(sf, sfObject),
     fetchAllRecords(ns, nsObject),
   ]);
-  return computeMatchesFromRows(sfRows, nsRows, sfField, nsField);
+  return computeMatchesFromRows(sfRows, nsRows, [sfField], [nsField]);
 }

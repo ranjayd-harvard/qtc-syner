@@ -7,7 +7,7 @@ export async function POST(req: Request) {
   const {
     sfConnectionId, sfDataMode = 'object', sfObject, sfQuery,
     nsConnectionId, nsDataMode = 'object', nsObject, nsQuery,
-    sfField, nsField, sfFilter, nsFilter, sfLimit, nsLimit,
+    sfFields, nsFields, condition = 'AND', sfFilter, nsFilter, sfLimit, nsLimit,
   } = await req.json() as {
     sfConnectionId: string;
     sfDataMode?: 'object' | 'soql';
@@ -17,8 +17,9 @@ export async function POST(req: Request) {
     nsDataMode?: 'object' | 'suiteql';
     nsObject?: string;
     nsQuery?: string;
-    sfField: string;
-    nsField: string;
+    sfFields: string[];
+    nsFields: string[];
+    condition?: 'AND' | 'OR';
     sfFilter?: string;
     nsFilter?: string;
     sfLimit?: number;
@@ -28,7 +29,7 @@ export async function POST(req: Request) {
   const sfSourceValid = sfDataMode === 'soql' ? !!sfQuery : !!sfObject;
   const nsSourceValid = nsDataMode === 'suiteql' ? !!nsQuery : !!nsObject;
 
-  if (!sfConnectionId || !nsConnectionId || !sfField || !nsField || !sfSourceValid || !nsSourceValid) {
+  if (!sfConnectionId || !nsConnectionId || !sfFields?.length || !nsFields?.length || !sfSourceValid || !nsSourceValid) {
     return new Response(JSON.stringify({ error: 'Missing required fields.' }), { status: 400 });
   }
 
@@ -74,7 +75,7 @@ export async function POST(req: Request) {
         ]);
 
         send({ type: 'computing' });
-        const result = computeMatchesFromRows(sfRows, nsRows, sfField, nsField);
+        const result = computeMatchesFromRows(sfRows, nsRows, sfFields, nsFields, condition);
         send({ type: 'result', data: result });
       } catch (err) {
         console.error('Product syncer compute error:', err);

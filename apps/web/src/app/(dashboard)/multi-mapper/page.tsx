@@ -80,9 +80,16 @@ export default function MultiMapperPage() {
       setL2({ connectionId: editingMapping.level2.connectionId, object: editingMapping.level2.object });
       setL3({ connectionId: editingMapping.level3.connectionId, object: editingMapping.level3.object });
       setMappingName(editingMapping.name);
+      // Convert model-level entries (sourceFields[], targetFields[]) to canvas edges (single fields)
       setCurrentMappings({
-        l1ToL2: editingMapping.l1ToL2Mappings,
-        l2ToL3: editingMapping.l2ToL3Mappings,
+        l1ToL2: editingMapping.l1ToL2Mappings.map((fm) => ({
+          sourceField: fm.sourceFields[0] ?? '',
+          targetField: fm.targetFields[0] ?? '',
+        })),
+        l2ToL3: editingMapping.l2ToL3Mappings.map((fm) => ({
+          sourceField: fm.sourceFields[0] ?? '',
+          targetField: fm.targetFields[0] ?? '',
+        })),
       });
     }
   }, [editingMapping, mode]);
@@ -114,8 +121,15 @@ export default function MultiMapperPage() {
       level1: { connectionId: l1.connectionId, connectionName: findName(l1.connectionId), object: l1.object },
       level2: { connectionId: l2.connectionId, connectionName: findName(l2.connectionId), object: l2.object },
       level3: { connectionId: l3.connectionId, connectionName: findName(l3.connectionId), object: l3.object },
-      l1ToL2Mappings: currentMappings.l1ToL2,
-      l2ToL3Mappings: currentMappings.l2ToL3,
+      // Canvas uses 1:1 edges; wrap each in single-element arrays for the model
+      l1ToL2Mappings: currentMappings.l1ToL2.map((m) => ({
+        sourceFields: [m.sourceField],
+        targetFields: [m.targetField],
+      })),
+      l2ToL3Mappings: currentMappings.l2ToL3.map((m) => ({
+        sourceFields: [m.sourceField],
+        targetFields: [m.targetField],
+      })),
     };
     if (mode === 'edit' && editingId) {
       updateMutation.mutate({ id: editingId, data }, { onSuccess: () => setMode('list') });

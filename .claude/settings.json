@@ -6,7 +6,23 @@
       "Bash(git add *)",
       "Bash(git branch *)",
       "Bash(netstat -anp tcp)",
-      "Bash(gh auth *)"
+      "Bash(gh auth *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git remote *)",
+      "Bash(git push *)",
+      "Bash(npm install *)",
+      "Bash(npm run *)",
+      "Bash(npx tsc *)",
+      "Bash(node -e \"const pkg = require\\('/Users/ranjay.kumar/Documents/Ranjay/agentic-ai/react/qtc-syncer/node_modules/@xyflow/react/package.json'\\); console.log\\(pkg.version\\)\")",
+      "Bash(grep -v \"^$\")",
+      "Bash(xargs cat)"
+    ],
+    "additionalDirectories": [
+      "/Users/ranjay.kumar/Documents/Ranjay/agentic-ai/react/qtc-syncer/apps/web/src/app/api/schema-mappings",
+      "/Users/ranjay.kumar/Documents/Ranjay/agentic-ai/react/qtc-syncer/apps/web/src/app/api/multi-level-mappings",
+      "/Users/ranjay.kumar/Documents/Ranjay/agentic-ai/react/qtc-syncer/apps/web/src/app/api/product-syncer-mappings",
+      "/Users/ranjay.kumar/Documents/Ranjay/agentic-ai/react/qtc-syncer/apps/web/src/app/api/connections/[id]/count",
+      "/Users/ranjay.kumar/Documents/Ranjay/agentic-ai/react/qtc-syncer/apps/web/src/app/(dashboard)/product-syncer/[id]"
     ]
   }
 }

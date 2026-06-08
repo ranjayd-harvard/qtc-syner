@@ -56,6 +56,7 @@ const NS_PRODUCT_API_TYPES = new Set([
 
 function QueryPreview({ result }: { result: QueryResponse }) {
   const preview = result.rows.slice(0, 5);
+  const hasRows = preview.length > 0;
   return (
     <div className="rounded-md border border-slate-200 overflow-hidden text-xs">
       <div className="overflow-x-auto max-h-44">
@@ -70,7 +71,7 @@ function QueryPreview({ result }: { result: QueryResponse }) {
             </tr>
           </thead>
           <tbody>
-            {preview.map((row, i) => (
+            {hasRows ? preview.map((row, i) => (
               <tr key={i} className="border-b border-slate-100 last:border-0 hover:bg-slate-50">
                 {result.columns.map((col) => (
                   <td key={col} className="px-3 py-1.5 font-mono text-slate-700 whitespace-nowrap max-w-[180px] truncate">
@@ -78,7 +79,13 @@ function QueryPreview({ result }: { result: QueryResponse }) {
                   </td>
                 ))}
               </tr>
-            ))}
+            )) : (
+              <tr>
+                <td colSpan={result.columns.length || 1} className="px-3 py-4 text-center text-slate-400 italic">
+                  Query is valid — 0 records match the current filter. Column names parsed from SELECT clause.
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
@@ -206,15 +213,21 @@ function MappingRow({
                 <table className="w-full max-w-2xl text-sm">
                   <thead>
                     <tr className="text-left text-xs text-slate-500 border-b border-slate-200">
-                      <th className="pb-2 font-semibold">Salesforce Field</th>
-                      <th className="pb-2 font-semibold">NetSuite Field</th>
+                      <th className="pb-2 font-semibold">Salesforce Field(s)</th>
+                      <th className="pb-2 w-14" />
+                      <th className="pb-2 font-semibold">NetSuite Field(s)</th>
                     </tr>
                   </thead>
                   <tbody>
                     {m.fieldMappings.map((fm, idx) => (
                       <tr key={idx} className="border-b border-slate-100 last:border-0">
-                        <td className="py-1.5 font-mono text-indigo-700">{fm.sourceField}</td>
-                        <td className="py-1.5 font-mono text-violet-700">{fm.targetField}</td>
+                        <td className="py-1.5 font-mono text-indigo-700">{fm.sourceFields.join(' + ')}</td>
+                        <td className="py-1.5 text-center">
+                          {fm.condition && fm.condition !== 'AND' && (
+                            <Badge className="text-xs bg-slate-100 text-slate-600 border-0">{fm.condition}</Badge>
+                          )}
+                        </td>
+                        <td className="py-1.5 font-mono text-violet-700">{fm.targetFields.join(' + ')}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -306,7 +319,7 @@ function QueryInput({
         </div>
       )}
 
-      {mutation.data && mutation.data.rows.length > 0 && (
+      {mutation.data && mutation.data.columns.length > 0 && (
         <QueryPreview result={mutation.data} />
       )}
     </div>
@@ -440,7 +453,7 @@ export default function ProductSyncerPage() {
   );
   const hasSchemaError = (sfSchemaNeeded && sfSchemaError) || (nsSchemaNeeded && nsSchemaError);
 
-  const validPairs = columnPairs.filter((p) => p.sfField && p.nsField);
+  const validPairs = columnPairs.filter((p) => p.sfFields.length > 0 && p.nsFields.length > 0);
   const isSaving = createMutation.isPending || updateMutation.isPending;
 
   // Column picker labels
@@ -463,8 +476,9 @@ export default function ProductSyncerPage() {
       setMappingName(editingMapping.name);
       setColumnPairs(
         editingMapping.fieldMappings.map((fm) => ({
-          sfField: fm.sourceField,
-          nsField: fm.targetField,
+          sfFields: fm.sourceFields,
+          nsFields: fm.targetFields,
+          condition: fm.condition ?? 'AND',
         }))
       );
     }
@@ -516,8 +530,8 @@ export default function ProductSyncerPage() {
       nsQuery: nsDataMode === 'suiteql' ? nsQuery : undefined,
       // Only send complete pairs — incomplete ones fail Zod min(1) validation on the server
       fieldMappings: columnPairs
-        .filter((p) => p.sfField && p.nsField)
-        .map((p) => ({ sourceField: p.sfField, targetField: p.nsField })),
+        .filter((p) => p.sfFields.length > 0 && p.nsFields.length > 0)
+        .map((p) => ({ sourceFields: p.sfFields, targetFields: p.nsFields, condition: p.condition })),
     };
     if (pageMode === 'edit' && editingId) {
       updateMutation.mutate({ id: editingId, data }, { onSuccess: () => setPageMode('default') });

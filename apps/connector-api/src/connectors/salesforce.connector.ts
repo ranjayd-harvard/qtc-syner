@@ -6,8 +6,11 @@ import type {
   ObjectMeta,
   FieldMeta,
   DataResponse,
+  DataRow,
   QueryResponse,
   FetchDataOptions,
+  UpsertOptions,
+  UpsertResult,
 } from '../types/index.js';
 
 export class SalesforceConnector implements BaseConnector {
@@ -145,21 +148,112 @@ export class SalesforceConnector implements BaseConnector {
     };
   }
 
-  async executeQuery(query: string, options: { page: number; pageSize: number }): Promise<QueryResponse> {
+  async upsertRecords(objectName: string, records: DataRow[], options: UpsertOptions): Promise<UpsertResult> {
     const conn = await this.getConnection();
-    const offset = (options.page - 1) * options.pageSize;
+    const result: UpsertResult = { created: 0, updated: 0, failed: 0, results: [] };
+    const BATCH_SIZE = 200;
 
-    let soql = query.trim().replace(/;$/, '');
-    if (!/LIMIT\s+\d+/i.test(soql)) {
-      soql += ` LIMIT ${options.pageSize} OFFSET ${offset}`;
+    interface SFSaveResult { success: boolean; id?: string; errors?: Array<{ message: string }> }
+    interface SFUpsertResult extends SFSaveResult { created?: boolean }
+
+    for (let offset = 0; offset < records.length; offset += BATCH_SIZE) {
+      const batch = records.slice(offset, offset + BATCH_SIZE);
+
+      if (options.mode === 'create') {
+        const raw = await (conn.sobject(objectName) as unknown as {
+          create(r: DataRow[]): Promise<SFSaveResult[]>
+        }).create(batch);
+        const arr = Array.isArray(raw) ? raw : [raw as SFSaveResult];
+        for (const [i, sr] of arr.entries()) {
+          if (sr.success) {
+            result.created++;
+            result.results.push({ index: offset + i, success: true, id: sr.id });
+          } else {
+            result.failed++;
+            result.results.push({ index: offset + i, success: false, error: sr.errors?.[0]?.message ?? 'Unknown error' });
+          }
+        }
+      } else if (options.mode === 'upsert' && options.externalIdField) {
+        const raw = await (conn.sobject(objectName) as unknown as {
+          upsert(r: DataRow[], field: string): Promise<SFUpsertResult[]>
+        }).upsert(batch, options.externalIdField);
+        const arr = Array.isArray(raw) ? raw : [raw as SFUpsertResult];
+        for (const [i, ur] of arr.entries()) {
+          if (ur.success) {
+            if (ur.created) result.created++; else result.updated++;
+            result.results.push({ index: offset + i, success: true, id: ur.id });
+          } else {
+            result.failed++;
+            result.results.push({ index: offset + i, success: false, error: ur.errors?.[0]?.message ?? 'Unknown error' });
+          }
+        }
+      } else if (options.mode === 'update') {
+        const raw = await (conn.sobject(objectName) as unknown as {
+          update(r: DataRow[]): Promise<SFSaveResult[]>
+        }).update(batch);
+        const arr = Array.isArray(raw) ? raw : [raw as SFSaveResult];
+        for (const [i, sr] of arr.entries()) {
+          if (sr.success) {
+            result.updated++;
+            result.results.push({ index: offset + i, success: true, id: sr.id });
+          } else {
+            result.failed++;
+            result.results.push({ index: offset + i, success: false, error: sr.errors?.[0]?.message ?? 'Unknown error' });
+          }
+        }
+      }
     }
 
-    const result = await conn.query<Record<string, unknown>>(soql);
-    const rows = result.records.map((r) => {
+    return result;
+  }
+
+  async executeQuery(query: string, options: { page: number; pageSize: number; cursor?: string }): Promise<QueryResponse> {
+    const conn = await this.getConnection();
+
+    const stripAttrs = (r: Record<string, unknown>) => {
       const { attributes: _a, ...rest } = r as Record<string, unknown> & { attributes?: unknown };
       return rest;
-    });
+    };
 
+    // Cursor path — avoids OFFSET entirely; used by bulk-fetch for Account and other
+    // objects where Salesforce caps OFFSET at 2000.
+    if (options.cursor) {
+      const result = await conn.queryMore<Record<string, unknown>>(options.cursor);
+      const rows = result.records.map(stripAttrs);
+      const columns = rows.length > 0 ? Object.keys(rows[0]) : [];
+      return {
+        rows,
+        total: result.totalSize,
+        columns,
+        hasMore: !result.done,
+        nextCursor: result.done ? undefined : result.nextRecordsUrl ?? undefined,
+      };
+    }
+
+    // Page 1 — run with LIMIT only (no OFFSET), Salesforce sets nextRecordsUrl so
+    // callers can follow pages without hitting the 2000-row OFFSET cap.
+    if (options.page === 1) {
+      let soql = query.trim().replace(/;$/, '');
+      if (!/LIMIT\s+\d+/i.test(soql)) soql += ` LIMIT ${options.pageSize}`;
+      const result = await conn.query<Record<string, unknown>>(soql);
+      const rows = result.records.map(stripAttrs);
+      const columns = rows.length > 0 ? Object.keys(rows[0]) : [];
+      return {
+        rows,
+        total: result.totalSize,
+        columns,
+        hasMore: !result.done,
+        nextCursor: result.done ? undefined : result.nextRecordsUrl ?? undefined,
+      };
+    }
+
+    // Page > 1 without a cursor — OFFSET fallback (query editor; breaks >2000 for
+    // some objects but that is a query-editor limitation, not the bulk-fetch path).
+    const offset = (options.page - 1) * options.pageSize;
+    let soql = query.trim().replace(/;$/, '');
+    if (!/LIMIT\s+\d+/i.test(soql)) soql += ` LIMIT ${options.pageSize} OFFSET ${offset}`;
+    const result = await conn.query<Record<string, unknown>>(soql);
+    const rows = result.records.map(stripAttrs);
     const columns = rows.length > 0 ? Object.keys(rows[0]) : [];
     return { rows, total: result.totalSize, columns };
   }
