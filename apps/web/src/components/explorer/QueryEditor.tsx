@@ -70,12 +70,12 @@ export function QueryEditor({ connectionId, connectionType }: Props) {
             pageSize={pageSize}
             onPageChange={(p) => {
               setPage(p);
-              mutation.mutate({ query, page: p, pageSize }).then(setResult);
+              mutation.mutateAsync({ query, page: p, pageSize }).then(setResult);
             }}
             onPageSizeChange={(s) => {
               setPageSize(s);
               setPage(1);
-              mutation.mutate({ query, page: 1, pageSize: s }).then(setResult);
+              mutation.mutateAsync({ query, page: 1, pageSize: s }).then(setResult);
             }}
             onSortChange={() => {}}
             onFilterChange={() => {}}
