@@ -20,7 +20,7 @@ export class SalesforceConnector implements BaseConnector {
     this.credentials = credentials;
   }
 
-  private async getConnection(): Promise<jsforce.Connection> {
+  private async getConnection() {
     const conn = new jsforce.Connection({
       loginUrl: this.credentials.loginUrl ?? this.credentials.instanceUrl ?? 'https://login.salesforce.com',
       version: '59.0',
