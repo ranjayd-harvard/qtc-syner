@@ -86,13 +86,13 @@ export class SalesforceConnector implements BaseConnector {
     // After the first streamMode fetch we receive a nextRecordsUrl; subsequent pages
     // call queryMore which has no OFFSET restriction.
     if (options.cursor) {
-      const result = await conn.queryMore<Record<string, unknown>>(options.cursor);
+      const result = await conn.queryMore(options.cursor);
       return {
-        rows: result.records.map(stripAttrs),
+        rows: (result.records as Record<string, unknown>[]).map(stripAttrs),
         total: result.totalSize,
         page: options.page,
         pageSize: options.pageSize,
-        nextCursor: result.done ? undefined : result.nextRecordsUrl ?? undefined,
+        nextCursor: result.done ? undefined : (result as any).nextRecordsUrl ?? undefined,
       };
     }
 
@@ -218,8 +218,8 @@ export class SalesforceConnector implements BaseConnector {
     // Cursor path — avoids OFFSET entirely; used by bulk-fetch for Account and other
     // objects where Salesforce caps OFFSET at 2000.
     if (options.cursor) {
-      const result = await conn.queryMore<Record<string, unknown>>(options.cursor);
-      const rows = result.records.map(stripAttrs);
+      const result = await conn.queryMore(options.cursor);
+      const rows = (result.records as Record<string, unknown>[]).map(stripAttrs);
       const columns = rows.length > 0 ? Object.keys(rows[0]) : [];
       return {
         rows,
