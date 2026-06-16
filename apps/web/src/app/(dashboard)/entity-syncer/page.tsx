@@ -3,23 +3,23 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  Plus, ArrowLeft, Pencil, Trash2, PackagePlus, ChevronDown, ChevronRight,
+  Plus, ArrowLeft, Pencil, Trash2, Copy, PackagePlus, ChevronDown, ChevronRight,
   Play, AlertTriangle, Loader2, CheckCircle2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useConnections } from '@/hooks/useConnections';
 import { useSchema, useObjects, useQueryMutation } from '@/hooks/useExplorer';
 import {
-  useProductSyncerMappings, useProductSyncerMapping,
-  useCreateProductSyncerMapping, useUpdateProductSyncerMapping, useDeleteProductSyncerMapping,
-} from '@/hooks/useProductSyncerMappings';
+  useEntitySyncerMappings, useEntitySyncerMapping,
+  useCreateEntitySyncerMapping, useUpdateEntitySyncerMapping, useDeleteEntitySyncerMapping,
+} from '@/hooks/useEntitySyncerMappings';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ColumnPairPicker } from '@/components/product-syncer/ColumnPairPicker';
-import type { ColumnPair } from '@/components/product-syncer/ColumnPairPicker';
+import { ColumnPairPicker } from '@/components/entity-syncer/ColumnPairPicker';
+import type { ColumnPair } from '@/components/entity-syncer/ColumnPairPicker';
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
@@ -28,7 +28,7 @@ import {
 } from '@/components/ui/table';
 import type { QueryResponse } from '@/types/connector';
 import type { FieldMeta } from '@/types/connector';
-import type { ProductSyncerMappingSummary, CreateProductSyncerMappingData } from '@/models/ProductSyncerMapping';
+import type { EntitySyncerMappingSummary, CreateEntitySyncerMappingData } from '@/models/EntitySyncerMapping';
 
 type PageMode = 'default' | 'create' | 'edit';
 type SfDataMode = 'object' | 'soql';
@@ -133,13 +133,14 @@ function ModeToggle<T extends string>({
 // ── Mapping list row ───────────────────────────────────────────────────────────
 
 function MappingRow({
-  m, isExpanded, onToggle, onSyncData, onEdit, onDelete,
+  m, isExpanded, onToggle, onSyncData, onEdit, onClone, onDelete,
 }: {
-  m: ProductSyncerMappingSummary;
+  m: EntitySyncerMappingSummary;
   isExpanded: boolean;
   onToggle: () => void;
   onSyncData: () => void;
   onEdit: () => void;
+  onClone: () => void;
   onDelete: () => void;
 }) {
   const sfSource = m.sfDataMode === 'soql'
@@ -180,6 +181,12 @@ function MappingRow({
               onClick={onEdit} title="Edit mapping"
             >
               <Pencil className="w-3.5 h-3.5" />
+            </Button>
+            <Button
+              variant="ghost" size="icon" className="h-7 w-7"
+              onClick={onClone} title="Clone mapping"
+            >
+              <Copy className="w-3.5 h-3.5" />
             </Button>
             <Button
               variant="ghost" size="icon"
@@ -328,7 +335,7 @@ function QueryInput({
 
 // ── Page ───────────────────────────────────────────────────────────────────────
 
-export default function ProductSyncerPage() {
+export default function EntitySyncerPage() {
   const router = useRouter();
   const [pageMode, setPageMode] = useState<PageMode>('default');
   const [editingId, setEditingId] = useState<string | undefined>(undefined);
@@ -350,12 +357,12 @@ export default function ProductSyncerPage() {
   const [columnPairs, setColumnPairs] = useState<ColumnPair[]>([]);
 
   const { data: connections = [], isLoading: loadingConnections } = useConnections();
-  const { data: mappings = [], isLoading: loadingMappings } = useProductSyncerMappings();
-  const { data: editingMapping } = useProductSyncerMapping(editingId);
+  const { data: mappings = [], isLoading: loadingMappings } = useEntitySyncerMappings();
+  const { data: editingMapping } = useEntitySyncerMapping(editingId);
 
-  const createMutation = useCreateProductSyncerMapping();
-  const updateMutation = useUpdateProductSyncerMapping();
-  const deleteMutation = useDeleteProductSyncerMapping();
+  const createMutation = useCreateEntitySyncerMapping();
+  const updateMutation = useUpdateEntitySyncerMapping();
+  const deleteMutation = useDeleteEntitySyncerMapping();
 
   const sfConnections = connections.filter((c) => c.type === 'salesforce');
   const nsConnections = connections.filter((c) => c.type === 'netsuite');
@@ -505,10 +512,28 @@ export default function ProductSyncerPage() {
     setPageMode('create');
   }, [resetForm]);
 
-  const handleEditMapping = useCallback((m: ProductSyncerMappingSummary) => {
+  const handleEditMapping = useCallback((m: EntitySyncerMappingSummary) => {
     setEditingId(m.id);
     setPageMode('edit');
   }, []);
+
+  const handleCloneMapping = useCallback((m: EntitySyncerMappingSummary) => {
+    const data: CreateEntitySyncerMappingData = {
+      name: `Copy of ${m.name}`,
+      sfConnectionId: m.sfConnectionId,
+      sfConnectionName: m.sfConnectionName,
+      sfDataMode: m.sfDataMode,
+      sfObject: m.sfObject,
+      sfQuery: m.sfQuery,
+      nsConnectionId: m.nsConnectionId,
+      nsConnectionName: m.nsConnectionName,
+      nsDataMode: m.nsDataMode,
+      nsObject: m.nsObject,
+      nsQuery: m.nsQuery,
+      fieldMappings: m.fieldMappings,
+    };
+    createMutation.mutate(data);
+  }, [createMutation]);
 
   const handleCancelMapping = useCallback(() => {
     setPageMode('default');
@@ -516,7 +541,7 @@ export default function ProductSyncerPage() {
   }, []);
 
   const handleSaveMapping = useCallback(() => {
-    const data: CreateProductSyncerMappingData = {
+    const data: CreateEntitySyncerMappingData = {
       name: mappingName,
       sfConnectionId,
       sfConnectionName: sfConn?.name ?? sfConnectionId,
@@ -561,7 +586,7 @@ export default function ProductSyncerPage() {
       <div className="space-y-6 animate-fade-in">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-slate-900">Product Syncer</h1>
+            <h1 className="text-2xl font-bold text-slate-900">Entity Syncer</h1>
             <p className="text-slate-500 text-sm mt-1">
               {pageMode === 'edit' ? 'Edit column mapping' : 'New column mapping — select connections and define field pairs to compare'}
             </p>
@@ -802,7 +827,7 @@ export default function ProductSyncerPage() {
     <div className="space-y-6 animate-fade-in">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Product Syncer</h1>
+          <h1 className="text-2xl font-bold text-slate-900">Entity Syncer</h1>
           <p className="text-slate-500 text-sm mt-1">
             Compare Salesforce Product2 and NetSuite items field-by-field using saved column mappings
           </p>
@@ -846,8 +871,9 @@ export default function ProductSyncerPage() {
                   m={m}
                   isExpanded={expandedId === m.id}
                   onToggle={() => setExpandedId(expandedId === m.id ? undefined : m.id)}
-                  onSyncData={() => router.push(`/product-syncer/${m.id}/data`)}
+                  onSyncData={() => router.push(`/entity-syncer/${m.id}/data`)}
                   onEdit={() => handleEditMapping(m)}
+                  onClone={() => handleCloneMapping(m)}
                   onDelete={() => setDeletingId(m.id)}
                 />,
               ])}

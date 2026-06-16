@@ -21,10 +21,15 @@ export class SalesforceConnector implements BaseConnector {
   }
 
   private async getConnection() {
-    const conn = new jsforce.Connection({
-      loginUrl: this.credentials.loginUrl ?? this.credentials.instanceUrl ?? 'https://login.salesforce.com',
-      version: '59.0',
-    });
+    // Normalize loginUrl: empty string falls back to default, http→https, strip trailing slash
+    const raw = this.credentials.loginUrl?.trim() || this.credentials.instanceUrl?.trim() || 'https://login.salesforce.com';
+    let loginUrl = raw.replace(/^http:\/\//i, 'https://').replace(/\/$/, '');
+    // lightning.force.com is the browser UI domain — SOAP login doesn't work there.
+    // Remap to the correct auth endpoint automatically.
+    if (/\.lightning\.force\.com/i.test(loginUrl)) {
+      loginUrl = /sandbox/i.test(loginUrl) ? 'https://test.salesforce.com' : 'https://login.salesforce.com';
+    }
+    const conn = new jsforce.Connection({ loginUrl, version: '59.0' });
     await conn.login(this.credentials.username, this.credentials.password);
     return conn;
   }

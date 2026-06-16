@@ -1,5 +1,5 @@
 import { getDecryptedCredentials } from '@/models/Connection';
-import { fetchAllRecords, fetchAllRecordsByQuery, computeMatchesFromRows } from '@/lib/product-syncer-compute';
+import { fetchAllRecords, fetchAllRecordsByQuery, computeMatchesFromRows } from '@/lib/entity-syncer-compute';
 
 export const maxDuration = 300;
 

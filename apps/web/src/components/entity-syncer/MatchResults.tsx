@@ -12,7 +12,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import type { AnalysisResult } from '@/app/api/product-syncer/analyze/route';
+import type { AnalysisResult } from '@/app/api/entity-syncer/analyze/route';
 
 interface MatchResultsProps {
   result: AnalysisResult;

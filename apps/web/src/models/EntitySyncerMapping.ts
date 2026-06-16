@@ -3,7 +3,7 @@ import { getDb } from '@/lib/mongodb';
 import type { FieldMappingEntry } from './SchemaMapping';
 export type { FieldMappingEntry } from './SchemaMapping';
 
-export interface ProductSyncerMappingDocument {
+export interface EntitySyncerMappingDocument {
   _id?: ObjectId;
   name: string;
   sfConnectionId: string;
@@ -21,7 +21,7 @@ export interface ProductSyncerMappingDocument {
   updatedAt: Date;
 }
 
-export interface ProductSyncerMappingSummary {
+export interface EntitySyncerMappingSummary {
   id: string;
   name: string;
   sfConnectionId: string;
@@ -39,7 +39,7 @@ export interface ProductSyncerMappingSummary {
   updatedAt: string;
 }
 
-export interface CreateProductSyncerMappingData {
+export interface CreateEntitySyncerMappingData {
   name: string;
   sfConnectionId: string;
   sfConnectionName: string;
@@ -54,7 +54,7 @@ export interface CreateProductSyncerMappingData {
   fieldMappings: FieldMappingEntry[];
 }
 
-function toSummary(doc: ProductSyncerMappingDocument): ProductSyncerMappingSummary {
+function toSummary(doc: EntitySyncerMappingDocument): EntitySyncerMappingSummary {
   return {
     id: doc._id!.toString(),
     name: doc.name,
@@ -82,45 +82,45 @@ function toSummary(doc: ProductSyncerMappingDocument): ProductSyncerMappingSumma
   };
 }
 
-export async function listProductSyncerMappings(): Promise<ProductSyncerMappingSummary[]> {
+export async function listEntitySyncerMappings(): Promise<EntitySyncerMappingSummary[]> {
   const db = await getDb();
   const docs = await db
-    .collection<ProductSyncerMappingDocument>('product_syncer_mappings')
+    .collection<EntitySyncerMappingDocument>('entity_syncer_mappings')
     .find({})
     .sort({ createdAt: -1 })
     .toArray();
   return docs.map(toSummary);
 }
 
-export async function getProductSyncerMappingById(id: string): Promise<ProductSyncerMappingSummary | null> {
+export async function getEntitySyncerMappingById(id: string): Promise<EntitySyncerMappingSummary | null> {
   const { ObjectId } = await import('mongodb');
   const db = await getDb();
   const doc = await db
-    .collection<ProductSyncerMappingDocument>('product_syncer_mappings')
+    .collection<EntitySyncerMappingDocument>('entity_syncer_mappings')
     .findOne({ _id: new ObjectId(id) });
   return doc ? toSummary(doc) : null;
 }
 
-export async function createProductSyncerMapping(
-  data: CreateProductSyncerMappingData
-): Promise<ProductSyncerMappingSummary> {
+export async function createEntitySyncerMapping(
+  data: CreateEntitySyncerMappingData
+): Promise<EntitySyncerMappingSummary> {
   const db = await getDb();
   const now = new Date();
-  const doc: ProductSyncerMappingDocument = { ...data, createdAt: now, updatedAt: now };
+  const doc: EntitySyncerMappingDocument = { ...data, createdAt: now, updatedAt: now };
   const result = await db
-    .collection<ProductSyncerMappingDocument>('product_syncer_mappings')
+    .collection<EntitySyncerMappingDocument>('entity_syncer_mappings')
     .insertOne(doc);
   return toSummary({ ...doc, _id: result.insertedId as unknown as ObjectId });
 }
 
-export async function updateProductSyncerMapping(
+export async function updateEntitySyncerMapping(
   id: string,
-  data: CreateProductSyncerMappingData
-): Promise<ProductSyncerMappingSummary | null> {
+  data: CreateEntitySyncerMappingData
+): Promise<EntitySyncerMappingSummary | null> {
   const { ObjectId } = await import('mongodb');
   const db = await getDb();
   const result = await db
-    .collection<ProductSyncerMappingDocument>('product_syncer_mappings')
+    .collection<EntitySyncerMappingDocument>('entity_syncer_mappings')
     .findOneAndUpdate(
       { _id: new ObjectId(id) },
       { $set: { ...data, updatedAt: new Date() } },
@@ -129,11 +129,11 @@ export async function updateProductSyncerMapping(
   return result ? toSummary(result) : null;
 }
 
-export async function deleteProductSyncerMappingById(id: string): Promise<boolean> {
+export async function deleteEntitySyncerMappingById(id: string): Promise<boolean> {
   const { ObjectId } = await import('mongodb');
   const db = await getDb();
   const result = await db
-    .collection<ProductSyncerMappingDocument>('product_syncer_mappings')
+    .collection<EntitySyncerMappingDocument>('entity_syncer_mappings')
     .deleteOne({ _id: new ObjectId(id) });
   return result.deletedCount === 1;
 }

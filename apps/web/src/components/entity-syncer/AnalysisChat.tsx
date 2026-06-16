@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { Send, X, Bot, User, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import type { AnalysisResult } from '@/app/api/product-syncer/analyze/route';
+import type { AnalysisResult } from '@/app/api/entity-syncer/analyze/route';
 
 export interface ChatMessage {
   role: 'user' | 'assistant';
@@ -15,6 +15,7 @@ interface AnalysisChatProps {
   sfObject: string;
   nsConnectionId: string;
   nsObject: string;
+  aiProvider: string;
   onClose: () => void;
   onAnalysisResult: (result: AnalysisResult) => void;
 }
@@ -26,7 +27,7 @@ async function sendMessage(
   nsConnectionId: string,
   nsObject: string
 ): Promise<{ reply: string; analysisResult: AnalysisResult | null }> {
-  const res = await fetch('/api/product-syncer/analyze', {
+  const res = await fetch('/api/entity-syncer/analyze', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ messages, sfConnectionId, sfObject, nsConnectionId, nsObject }),
@@ -38,7 +39,9 @@ async function sendMessage(
   return res.json();
 }
 
-export function AnalysisChat({ sfConnectionId, sfObject, nsConnectionId, nsObject, onClose, onAnalysisResult }: AnalysisChatProps) {
+export function AnalysisChat({ sfConnectionId, sfObject, nsConnectionId, nsObject, aiProvider, onClose, onAnalysisResult }: AnalysisChatProps) {
+  const AI_LABELS: Record<string, string> = { gemini: 'Gemini', claude: 'Claude', openai: 'ChatGPT' };
+  const aiLabel = AI_LABELS[aiProvider] ?? 'AI';
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -110,7 +113,7 @@ export function AnalysisChat({ sfConnectionId, sfObject, nsConnectionId, nsObjec
       <div className="flex items-center gap-2 px-4 py-3 border-b border-slate-200 bg-slate-50 flex-shrink-0">
         <Bot className="w-4 h-4 text-indigo-600" />
         <span className="text-sm font-semibold text-slate-700">AI Sync Analyst</span>
-        <span className="text-xs text-slate-400 ml-1">Gemini</span>
+        <span className="text-xs text-slate-400 ml-1">{aiLabel}</span>
         <Button
           variant="ghost"
           size="icon"

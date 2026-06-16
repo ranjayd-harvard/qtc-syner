@@ -49,5 +49,7 @@ services:
     environment:
       NODE_ENV: development
       NEXTAUTH_URL: http://localhost:3061
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
     ports:
       - "3061:3061"

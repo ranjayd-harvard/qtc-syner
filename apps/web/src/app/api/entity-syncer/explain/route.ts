@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { generateText } from '@/lib/ai-providers';
 
 export const maxDuration = 60;
 
@@ -16,17 +16,9 @@ export async function POST(req: Request) {
         nsSample: Record<string, unknown>[];
       };
 
-    if (!process.env.GEMINI_API_KEY) {
-      return NextResponse.json(
-        { error: 'GEMINI_API_KEY is not configured.' },
-        { status: 500 }
-      );
-    }
-
     const sfLabel = sfFields.join(' + ');
     const nsLabel = nsFields.join(' + ');
 
-    // For composite keys, show the concatenated value of all mapped fields per record
     const sfValues = unmatchedSfSample
       .slice(0, 20)
       .map((r) => sfFields.map((f) => String(r[f] ?? '')).join(' | '))
@@ -56,13 +48,8 @@ Please provide:
 
 Be specific and concise. Format your response with clear headings.`;
 
-    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({
-      model: process.env.GEMINI_MODEL || 'gemini-2.5-flash',
-    });
-
-    const result = await model.generateContent(prompt);
-    return NextResponse.json({ explanation: result.response.text() });
+    const explanation = await generateText(prompt);
+    return NextResponse.json({ explanation });
   } catch (err) {
     console.error('Product syncer explain error:', err);
     return NextResponse.json({ error: String(err) }, { status: 500 });

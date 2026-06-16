@@ -14,6 +14,8 @@ import {
   Workflow,
   GitMerge,
   PackagePlus,
+  Users,
+  BrainCircuit,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useState } from 'react';
@@ -24,8 +26,10 @@ const navItems = [
   { href: '/compare', label: 'Schema Compare', icon: GitCompare },
   { href: '/mapper', label: 'Schema Mapper', icon: Workflow },
   { href: '/multi-mapper', label: 'Multi-level Mapping', icon: GitMerge },
-  { href: '/product-syncer', label: 'Product Syncer', icon: PackagePlus },
+  { href: '/entity-syncer', label: 'Entity Syncer', icon: PackagePlus },
   { href: '/admin/connections', label: 'Connections', icon: Plug2 },
+  { href: '/admin/users', label: 'Users', icon: Users },
+  { href: '/admin/settings', label: 'AI Settings', icon: BrainCircuit },
   { href: '/admin/connections/new', label: 'New Connection', icon: Settings, hidden: true },
 ];
 

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
-import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai';
+import { generateJSON } from '@/lib/ai-providers';
+import type { JSONSchema } from '@/lib/ai-providers';
 
 export const maxDuration = 120;
 
@@ -18,6 +19,30 @@ Return ONLY matches where confidence >= 0.5. For each match provide:
 - reasons: 2–4 short, specific observations that justify the match
 
 Do NOT suggest a match where there is no clear evidence. Fewer high-confidence suggestions are better than many speculative ones.`;
+
+const MATCH_SCHEMA: JSONSchema = {
+  type: 'object',
+  properties: {
+    matches: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          sf_index: { type: 'integer', description: '0-based index into the Salesforce sample array' },
+          ns_index: { type: 'integer', description: '0-based index into the NetSuite sample array' },
+          confidence: { type: 'number', description: 'Confidence score from 0.0 to 1.0' },
+          reasons: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'Specific observations justifying this match',
+          },
+        },
+        required: ['sf_index', 'ns_index', 'confidence', 'reasons'],
+      },
+    },
+  },
+  required: ['matches'],
+};
 
 function trimRecord(record: Record<string, unknown>, maxFields = 12): Record<string, unknown> {
   return Object.fromEntries(
@@ -41,56 +66,12 @@ export async function POST(req: Request) {
       nsSampleSize?: number;
     };
 
-    if (!process.env.GEMINI_API_KEY) {
-      return NextResponse.json({ error: 'GEMINI_API_KEY is not configured.' }, { status: 500 });
-    }
-
     if (!sfRecords?.length || !nsRecords?.length) {
       return NextResponse.json({ matches: [], sfSampleSize: 0, nsSampleSize: 0 });
     }
 
     const sfSample = sfRecords.slice(0, sfSampleSize).map((r) => trimRecord(r));
     const nsSample = nsRecords.slice(0, nsSampleSize).map((r) => trimRecord(r));
-
-    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({
-      model: process.env.GEMINI_MODEL || 'gemini-2.5-flash',
-      generationConfig: {
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: SchemaType.OBJECT,
-          properties: {
-            matches: {
-              type: SchemaType.ARRAY,
-              items: {
-                type: SchemaType.OBJECT,
-                properties: {
-                  sf_index: {
-                    type: SchemaType.INTEGER,
-                    description: '0-based index into the Salesforce sample array',
-                  },
-                  ns_index: {
-                    type: SchemaType.INTEGER,
-                    description: '0-based index into the NetSuite sample array',
-                  },
-                  confidence: {
-                    type: SchemaType.NUMBER,
-                    description: 'Confidence score from 0.0 to 1.0',
-                  },
-                  reasons: {
-                    type: SchemaType.ARRAY,
-                    items: { type: SchemaType.STRING },
-                    description: 'Specific observations justifying this match',
-                  },
-                },
-                required: ['sf_index', 'ns_index', 'confidence', 'reasons'],
-              },
-            },
-          },
-          required: ['matches'],
-        },
-      },
-    });
 
     const userPrompt = `${PROMPT}
 
@@ -102,10 +83,9 @@ ${JSON.stringify(nsSample, null, 2)}
 
 Find matches.`;
 
-    const result = await model.generateContent(userPrompt);
-    const parsed = JSON.parse(result.response.text()) as {
+    const parsed = await generateJSON<{
       matches: Array<{ sf_index: number; ns_index: number; confidence: number; reasons: string[] }>;
-    };
+    }>(userPrompt, MATCH_SCHEMA);
 
     const matches = (parsed.matches ?? [])
       .filter(

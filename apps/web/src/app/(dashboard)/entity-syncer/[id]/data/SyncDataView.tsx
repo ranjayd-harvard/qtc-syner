@@ -16,8 +16,8 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from '@/components/ui/dialog';
-import type { ProductSyncerMappingSummary, FieldMappingEntry } from '@/models/ProductSyncerMapping';
-import type { PairResult } from '@/lib/product-syncer-compute';
+import type { EntitySyncerMappingSummary, FieldMappingEntry } from '@/models/EntitySyncerMapping';
+import type { PairResult } from '@/lib/entity-syncer-compute';
 import { computeFuzzy } from '@/lib/fuzzy-match';
 import type { FuzzyResult } from '@/lib/fuzzy-match';
 import type { UpsertResult } from '@/lib/connector-client';
@@ -163,7 +163,7 @@ function SyncDialog({
   const execute = useCallback(async () => {
     setState({ phase: 'syncing' });
     try {
-      const res = await fetch('/api/product-syncer/sync', {
+      const res = await fetch('/api/entity-syncer/sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1093,22 +1093,23 @@ function PairResultTable({
   );
 }
 
-// ── Gemini explanation panel ───────────────────────────────────────────────────
+// ── AI explanation panel ──────────────────────────────────────────────────────
 
 function ExplainPanel({
-  sfFields, nsFields, nsObject, result,
+  sfFields, nsFields, nsObject, result, aiLabel,
 }: {
   sfFields: string[];
   nsFields: string[];
   nsObject: string;
   result: PairResult;
+  aiLabel: string;
 }) {
   const [state, setState] = useState<ExplainState>({ status: 'idle' });
 
   const runExplain = useCallback(async () => {
     setState({ status: 'loading' });
     try {
-      const res = await fetch('/api/product-syncer/explain', {
+      const res = await fetch('/api/entity-syncer/explain', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1136,7 +1137,7 @@ function ExplainPanel({
         className="gap-1.5 text-indigo-600 border-indigo-200 hover:bg-indigo-50"
         onClick={runExplain}
       >
-        <Sparkles className="w-3.5 h-3.5" /> Analyze with Gemini
+        <Sparkles className="w-3.5 h-3.5" /> Analyze with {aiLabel}
       </Button>
     );
   }
@@ -1145,7 +1146,7 @@ function ExplainPanel({
     return (
       <div className="flex items-center gap-2 text-sm text-slate-500">
         <Loader2 className="w-4 h-4 animate-spin" />
-        <span>Gemini is analyzing mismatches…</span>
+        <span>{aiLabel} is analyzing mismatches…</span>
       </div>
     );
   }
@@ -1163,7 +1164,7 @@ function ExplainPanel({
     <div className="rounded-lg border border-indigo-200 bg-indigo-50/50 p-4">
       <div className="flex items-center gap-2 mb-2">
         <Sparkles className="w-4 h-4 text-indigo-500" />
-        <span className="text-sm font-semibold text-indigo-800">Gemini Analysis</span>
+        <span className="text-sm font-semibold text-indigo-800">{aiLabel} Analysis</span>
         <Button variant="ghost" size="sm" className="ml-auto text-xs h-6" onClick={runExplain}>Re-run</Button>
       </div>
       <div className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">
@@ -1364,11 +1365,13 @@ function AiMatchPanel({
   unmatchedNsRecords,
   sfMatchFields,
   nsMatchFields,
+  aiLabel,
 }: {
   unmatchedSfRecords: Record<string, unknown>[];
   unmatchedNsRecords: Record<string, unknown>[];
   sfMatchFields: string[];
   nsMatchFields: string[];
+  aiLabel: string;
 }) {
   const [state, setState] = useState<AiMatchState>({ status: 'idle' });
   const [sampleSize, setSampleSize] = useState(50);
@@ -1381,7 +1384,7 @@ function AiMatchPanel({
     setState({ status: 'loading' });
     setExpandedIdx(null);
     try {
-      const res = await fetch('/api/product-syncer/ai-match', {
+      const res = await fetch('/api/entity-syncer/ai-match', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1465,7 +1468,7 @@ function AiMatchPanel({
 
       {canRun && state.status === 'idle' && (
         <div className="px-4 py-8 text-center text-xs text-slate-400 space-y-1">
-          <p>Gemini analyzes unmatched records from both systems and identifies likely matches despite differing field values, naming conventions, or ID formats.</p>
+          <p>{aiLabel} analyzes unmatched records from both systems and identifies likely matches despite differing field values, naming conventions, or ID formats.</p>
           <p className="text-slate-300">
             {unmatchedSfRecords.length.toLocaleString()} unmatched SF · {unmatchedNsRecords.length.toLocaleString()} unmatched NS
             {(unmatchedSfRecords.length > sampleSize || unmatchedNsRecords.length > sampleSize) && (
@@ -1598,7 +1601,7 @@ type SyncTarget =
 
 function PairCard({
   sfFields, nsFields, condition, sfObject, nsObject, sfConnectionId, nsConnectionId,
-  mappingPairs, state, onRun,
+  mappingPairs, state, onRun, aiLabel,
 }: {
   sfFields: string[];
   nsFields: string[];
@@ -1610,6 +1613,7 @@ function PairCard({
   mappingPairs: FieldMappingEntry[];
   state: PairState;
   onRun: () => void;
+  aiLabel: string;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [syncTarget, setSyncTarget] = useState<SyncTarget | null>(null);
@@ -1738,12 +1742,14 @@ function PairCard({
             unmatchedNsRecords={state.result.unmatchedNsRecords}
             sfMatchFields={sfFields}
             nsMatchFields={nsFields}
+            aiLabel={aiLabel}
           />
           <ExplainPanel
             sfFields={sfFields}
             nsFields={nsFields}
             nsObject={nsObject}
             result={state.result}
+            aiLabel={aiLabel}
           />
         </div>
       )}
@@ -1753,7 +1759,9 @@ function PairCard({
 
 // ── Main view ──────────────────────────────────────────────────────────────────
 
-export function SyncDataView({ mapping }: { mapping: ProductSyncerMappingSummary }) {
+export function SyncDataView({ mapping, aiProvider }: { mapping: EntitySyncerMappingSummary; aiProvider: string }) {
+  const aiLabelS: Record<string, string> = { gemini: 'Gemini', claude: 'Claude', openai: 'ChatGPT' };
+  const aiLabel = aiLabelS[aiProvider] ?? 'AI';
   const [pairStates, setPairStates] = useState<PairState[]>(
     () => mapping.fieldMappings.map(() => ({ status: 'idle' as const }))
   );
@@ -1785,7 +1793,7 @@ export function SyncDataView({ mapping }: { mapping: ProductSyncerMappingSummary
       return next;
     });
     try {
-      const res = await fetch('/api/product-syncer/compute', {
+      const res = await fetch('/api/entity-syncer/compute', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1874,7 +1882,7 @@ export function SyncDataView({ mapping }: { mapping: ProductSyncerMappingSummary
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Link href="/product-syncer">
+          <Link href="/entity-syncer">
             <Button variant="ghost" size="icon" className="h-8 w-8">
               <ArrowLeft className="w-4 h-4" />
             </Button>
@@ -2059,7 +2067,7 @@ export function SyncDataView({ mapping }: { mapping: ProductSyncerMappingSummary
         <div className="flex flex-col items-center justify-center py-20 text-slate-400 border border-dashed rounded-lg bg-slate-50">
           <p className="text-sm font-medium">No column pairs in this mapping</p>
           <p className="text-xs mt-0.5">
-            <Link href={`/product-syncer`} className="text-indigo-600 hover:underline">Edit the mapping</Link>
+            <Link href={`/entity-syncer`} className="text-indigo-600 hover:underline">Edit the mapping</Link>
             {' '}to add column pairs.
           </p>
         </div>
@@ -2078,6 +2086,7 @@ export function SyncDataView({ mapping }: { mapping: ProductSyncerMappingSummary
               mappingPairs={mapping.fieldMappings}
               state={pairStates[i]}
               onRun={() => runPair(i)}
+              aiLabel={aiLabel}
             />
           ))}
         </div>

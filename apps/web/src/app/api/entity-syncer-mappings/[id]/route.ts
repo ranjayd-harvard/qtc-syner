@@ -1,14 +1,14 @@
 import { NextResponse } from 'next/server';
 import {
-  getProductSyncerMappingById,
-  updateProductSyncerMapping,
-  deleteProductSyncerMappingById,
-} from '@/models/ProductSyncerMapping';
+  getEntitySyncerMappingById,
+  updateEntitySyncerMapping,
+  deleteEntitySyncerMappingById,
+} from '@/models/EntitySyncerMapping';
 import { productSyncerMappingSchema } from '../schemas';
 
 export async function GET(_req: Request, { params }: { params: { id: string } }) {
   try {
-    const mapping = await getProductSyncerMappingById(params.id);
+    const mapping = await getEntitySyncerMappingById(params.id);
     if (!mapping) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     return NextResponse.json(mapping);
   } catch (err) {
@@ -19,7 +19,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
 export async function PUT(req: Request, { params }: { params: { id: string } }) {
   try {
     const body = productSyncerMappingSchema.parse(await req.json());
-    const mapping = await updateProductSyncerMapping(params.id, body);
+    const mapping = await updateEntitySyncerMapping(params.id, body);
     if (!mapping) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     return NextResponse.json(mapping);
   } catch (err) {
@@ -29,7 +29,7 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
 
 export async function DELETE(_req: Request, { params }: { params: { id: string } }) {
   try {
-    const deleted = await deleteProductSyncerMappingById(params.id);
+    const deleted = await deleteEntitySyncerMappingById(params.id);
     if (!deleted) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     return NextResponse.json({ success: true });
   } catch (err) {

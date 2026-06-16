@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server';
-import { listProductSyncerMappings, createProductSyncerMapping } from '@/models/ProductSyncerMapping';
+import { listEntitySyncerMappings, createEntitySyncerMapping } from '@/models/EntitySyncerMapping';
 import { productSyncerMappingSchema } from './schemas';
 
 export async function GET() {
   try {
-    const mappings = await listProductSyncerMappings();
+    const mappings = await listEntitySyncerMappings();
     return NextResponse.json(mappings);
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 });
@@ -14,7 +14,7 @@ export async function GET() {
 export async function POST(req: Request) {
   try {
     const body = productSyncerMappingSchema.parse(await req.json());
-    const mapping = await createProductSyncerMapping(body);
+    const mapping = await createEntitySyncerMapping(body);
     return NextResponse.json(mapping, { status: 201 });
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 400 });

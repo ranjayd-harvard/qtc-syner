@@ -253,10 +253,11 @@ export class NetSuiteConnector implements BaseConnector {
         pageSize: options.pageSize,
       };
     } catch (err) {
-      // SuiteQL doesn't know this table — fall back to the Record API collection endpoint
+      // SuiteQL can't serve this table (not found, invalid, or no SuiteQL permission) —
+      // fall back to the Record API collection endpoint which uses different permission checks.
       const errMsg = err instanceof Error ? err.message : '';
-      const isNotFound = /not found|INVALID_PARAMETER|invalid.*table|unknown.*table/i.test(errMsg);
-      if (!isNotFound) throw err;
+      const shouldFallback = /not found|INVALID_PARAMETER|invalid.*table|unknown.*table|USER_ERROR|permission/i.test(errMsg);
+      if (!shouldFallback) throw err;
 
       interface NSRecordCollection {
         items: Record<string, unknown>[];
